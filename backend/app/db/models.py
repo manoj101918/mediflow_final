@@ -159,6 +159,39 @@ class LabRangeSex(enum.StrEnum):
     ANY = "any"
 
 
+class LabPriority(enum.StrEnum):
+    ROUTINE = "routine"
+    URGENT = "urgent"
+    STAT = "stat"
+
+
+class LabOrderStatus(enum.StrEnum):
+    ORDERED = "ordered"
+    IN_PROGRESS = "in_progress"
+    PARTIALLY_RELEASED = "partially_released"
+    RELEASED = "released"
+    CANCELLED = "cancelled"
+
+
+class LabItemStatus(enum.StrEnum):
+    ORDERED = "ordered"
+    SAMPLE_COLLECTED = "sample_collected"
+    SAMPLE_REJECTED = "sample_rejected"
+    RESULT_ENTERED = "result_entered"
+    VERIFIED = "verified"
+    RELEASED = "released"
+    CANCELLED = "cancelled"
+
+
+class LabFlag(enum.StrEnum):
+    NORMAL = "normal"
+    LOW = "low"
+    HIGH = "high"
+    CRITICAL_LOW = "critical_low"
+    CRITICAL_HIGH = "critical_high"
+    ABNORMAL = "abnormal"
+
+
 class RecordAccessAction(enum.StrEnum):
     CHART_OPEN = "chart_open"
     CHAT_QUESTION = "chat_question"
@@ -502,6 +535,12 @@ class PatientReport(Base):
         _pg_enum(IngestionStatus, "ingestion_status"), server_default=text("'pending'")
     )
     ingestion_error: Mapped[str | None] = mapped_column(Text)
+    # Lab PDFs: the generated report of an order (is_generated) or the lab machine's own PDF.
+    # Their content is indexed through the order's structured results, never separately.
+    lab_order_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("lab_orders.id", ondelete="CASCADE")
+    )
+    is_generated: Mapped[bool] = mapped_column(server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), server_onupdate=FetchedValue()
@@ -686,4 +725,148 @@ class LabReferenceRange(Base):
     critical_low: Mapped[Decimal | None] = mapped_column(Numeric)
     critical_high: Mapped[Decimal | None] = mapped_column(Numeric)
     text_normal: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class LabOrder(Base):
+    __tablename__ = "lab_orders"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"))
+    ordering_doctor_id: Mapped[UUID] = mapped_column(ForeignKey("doctors.id"))
+    appointment_id: Mapped[UUID] = mapped_column(ForeignKey("appointments.id", ondelete="CASCADE"))
+    consultation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("consultations.id", ondelete="SET NULL")
+    )
+    order_number: Mapped[str] = mapped_column(Text)
+    priority: Mapped[LabPriority] = mapped_column(
+        _pg_enum(LabPriority, "lab_priority"), server_default=text("'routine'")
+    )
+    clinical_note: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[LabOrderStatus] = mapped_column(
+        _pg_enum(LabOrderStatus, "lab_order_status"), server_default=text("'ordered'")
+    )
+    cancelled_reason: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None]
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class LabSample(Base):
+    __tablename__ = "lab_samples"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    order_id: Mapped[UUID] = mapped_column(ForeignKey("lab_orders.id", ondelete="CASCADE"))
+    sample_code: Mapped[str] = mapped_column(Text)
+    sample_type: Mapped[LabSampleType] = mapped_column(_pg_enum(LabSampleType, "lab_sample_type"))
+    container: Mapped[str | None] = mapped_column(Text)
+    collected_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+    collected_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    rejected_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    rejected_at: Mapped[datetime | None]
+    rejected_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class LabOrderItem(Base):
+    __tablename__ = "lab_order_items"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    order_id: Mapped[UUID] = mapped_column(ForeignKey("lab_orders.id", ondelete="CASCADE"))
+    test_id: Mapped[UUID] = mapped_column(ForeignKey("lab_tests.id"))
+    test_code: Mapped[str] = mapped_column(Text)
+    test_name: Mapped[str] = mapped_column(Text)
+    status: Mapped[LabItemStatus] = mapped_column(
+        _pg_enum(LabItemStatus, "lab_item_status"), server_default=text("'ordered'")
+    )
+    sample_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("lab_samples.id", ondelete="SET NULL")
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    return_comment: Mapped[str | None] = mapped_column(Text)
+    entered_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    entered_at: Mapped[datetime | None]
+    verified_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    verified_at: Mapped[datetime | None]
+    released_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    released_at: Mapped[datetime | None]
+    cancelled_reason: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class LabResult(Base):
+    __tablename__ = "lab_results"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    order_item_id: Mapped[UUID] = mapped_column(
+        ForeignKey("lab_order_items.id", ondelete="CASCADE")
+    )
+    parameter_id: Mapped[UUID] = mapped_column(ForeignKey("lab_test_parameters.id"))
+    parameter_code: Mapped[str] = mapped_column(Text)
+    parameter_name: Mapped[str] = mapped_column(Text)
+    unit: Mapped[str | None] = mapped_column(Text)
+    value_type: Mapped[LabValueType] = mapped_column(_pg_enum(LabValueType, "lab_value_type"))
+    value_numeric: Mapped[Decimal | None] = mapped_column(Numeric)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    ref_low: Mapped[Decimal | None] = mapped_column(Numeric)
+    ref_high: Mapped[Decimal | None] = mapped_column(Numeric)
+    ref_critical_low: Mapped[Decimal | None] = mapped_column(Numeric)
+    ref_critical_high: Mapped[Decimal | None] = mapped_column(Numeric)
+    ref_text_normal: Mapped[str | None] = mapped_column(Text)
+    range_label: Mapped[str | None] = mapped_column(Text)
+    flag: Mapped[LabFlag | None] = mapped_column(_pg_enum(LabFlag, "lab_flag"))
+    sort_order: Mapped[int] = mapped_column(server_default=text("0"))
+    version: Mapped[int] = mapped_column(server_default=text("1"))
+    is_current: Mapped[bool] = mapped_column(server_default=text("true"))
+    amended_reason: Mapped[str | None] = mapped_column(Text)
+    entered_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    entered_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class LabCriticalAlert(Base):
+    __tablename__ = "lab_critical_alerts"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    result_id: Mapped[UUID] = mapped_column(ForeignKey("lab_results.id", ondelete="CASCADE"))
+    order_id: Mapped[UUID] = mapped_column(ForeignKey("lab_orders.id", ondelete="CASCADE"))
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"))
+    doctor_id: Mapped[UUID] = mapped_column(ForeignKey("doctors.id"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    acknowledged_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+    acknowledged_at: Mapped[datetime | None]
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class LabOrderEvent(Base):
+    __tablename__ = "lab_order_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    order_id: Mapped[UUID] = mapped_column(ForeignKey("lab_orders.id", ondelete="CASCADE"))
+    order_item_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("lab_order_items.id", ondelete="SET NULL")
+    )
+    event: Mapped[str] = mapped_column(Text)
+    from_status: Mapped[str | None] = mapped_column(Text)
+    to_status: Mapped[str | None] = mapped_column(Text)
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
