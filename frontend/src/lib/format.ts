@@ -88,3 +88,17 @@ export function formatPhone(phone: string | null): string {
   const m = /^\+91(\d{5})(\d{5})$/.exec(phone)
   return m ? `+91 ${m[1]} ${m[2]}` : phone
 }
+
+/** Wall-clock "HH:MM[:SS]" (schedule times) -> "9:00 AM" */
+export function formatClock(hhmmss: string): string {
+  const [h = 0, m = 0] = hhmmss.split(':').map(Number)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${suffix}`
+}
+
+export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/** Clinic weekday index (0 = Monday, matching the backend) of a YYYY-MM-DD date. */
+export function clinicWeekday(isoDate: string): number {
+  return (new Date(`${isoDate}T12:00:00Z`).getUTCDay() + 6) % 7
+}

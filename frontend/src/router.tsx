@@ -5,6 +5,10 @@ import { AppShell } from '@/components/layout/AppShell'
 import { ComingSoon } from '@/components/layout/ComingSoon'
 import { ReceptionLayout } from '@/components/layout/ReceptionLayout'
 import { LoginPage } from '@/pages/Login'
+import { AppointmentsPage } from '@/pages/reception/Appointments'
+import { DoctorsPage } from '@/pages/reception/Doctors'
+import { PatientDetailPage } from '@/pages/reception/PatientDetail'
+import { PatientsPage } from '@/pages/reception/Patients'
 import { TodayPage } from '@/pages/reception/Today'
 
 export const router = createBrowserRouter([
@@ -19,9 +23,10 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <TodayPage /> },
-      { path: 'appointments', element: <ComingSoon title="Appointments" milestone="Milestone 6" /> },
-      { path: 'patients', element: <ComingSoon title="Patients" milestone="Milestone 6" /> },
-      { path: 'doctors', element: <ComingSoon title="Doctors" milestone="Milestone 6" /> },
+      { path: 'appointments', element: <AppointmentsPage /> },
+      { path: 'patients', element: <PatientsPage /> },
+      { path: 'patients/:patientId', element: <PatientDetailPage /> },
+      { path: 'doctors', element: <DoctorsPage /> },
     ],
   },
   {

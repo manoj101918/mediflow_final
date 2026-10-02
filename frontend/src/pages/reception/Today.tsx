@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { PalmtreeIcon, SearchIcon } from 'lucide-react'
+import { PalmtreeIcon, PlusIcon, SearchIcon } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 
 import { AppointmentTable } from '@/components/appointments/AppointmentTable'
+import { useNewAppointment } from '@/components/appointments/newAppointmentContext'
 import { PendingConfirmation } from '@/components/appointments/PendingConfirmation'
 import { SummaryCards } from '@/components/appointments/SummaryCards'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -61,6 +63,7 @@ export function TodayPage() {
   const [doctorId, setDoctorId] = useState('all')
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const { openNewAppointment } = useNewAppointment()
   useHotkeys({ '/': () => searchRef.current?.focus() })
 
   const dayQuery = useQuery({
@@ -93,12 +96,18 @@ export function TodayPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
           <p className="text-sm text-muted-foreground">{formatWeekdayDate(today)}</p>
         </div>
-        {onLeave.length > 0 && (
-          <p className="flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
-            <PalmtreeIcon className="size-4" />
-            On leave today: {onLeave.map((d) => d.full_name).join(', ')}
-          </p>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {onLeave.length > 0 && (
+            <p className="flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+              <PalmtreeIcon className="size-4" />
+              On leave today: {onLeave.map((d) => d.full_name).join(', ')}
+            </p>
+          )}
+          <Button onClick={() => openNewAppointment()}>
+            <PlusIcon /> New appointment
+            <kbd className="ml-1 hidden rounded bg-primary-foreground/20 px-1 text-[10px] sm:inline">N</kbd>
+          </Button>
+        </div>
       </div>
 
       <SummaryCards appointments={dayQuery.isPending ? undefined : forDoctor} />

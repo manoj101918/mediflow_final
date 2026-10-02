@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 
 import { useAuth } from '@/auth/context'
 import { appointmentKeys } from '@/lib/appointments'
+import { patientKeys } from '@/lib/patients'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database'
 
@@ -49,6 +50,8 @@ export function useRealtimeAppointments(onInsertByOthers?: (row: AppointmentRow)
           },
           (payload: AppointmentChange) => {
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.all })
+            // Patient pages show visit history.
+            void queryClient.invalidateQueries({ queryKey: patientKeys.all })
             if (payload.eventType === 'INSERT' && payload.new.created_by !== userId) {
               callbackRef.current?.(payload.new)
             }

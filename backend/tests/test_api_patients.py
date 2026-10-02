@@ -60,6 +60,8 @@ async def test_search_by_name_and_phone(client: AsyncClient, clinic: ClinicFixtu
 
     assert await names("ravi") == ["Ravi Kumar", "Ravindra Jadeja"]
     assert await names("Laxmi Narayanan") == ["Lakshmi Narayanan"]  # typo-tolerant
+    assert await names("laxmi") == ["Lakshmi Narayanan"]  # one misspelt word
+    assert await names("narayan") == ["Lakshmi Narayanan"]  # partial surname
     assert await names("98450") == ["Lakshmi Narayanan"]
     assert await names("+91 98480 12345") == ["Ravi Kumar"]
 

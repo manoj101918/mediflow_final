@@ -17,8 +17,9 @@ from app.services.booking.patients import (
 )
 from app.services.booking.results import BookingErrorCode, BookingResult, failure, success
 
-# Looser than the duplicate threshold: search should surface typos.
-SEARCH_NAME_SIMILARITY = 0.3
+# Search compares the query with the best-matching part of the name (pg_trgm word_similarity),
+# so one word or a misspelling still matches ("laxmi" -> "Lakshmi Narayanan").
+SEARCH_WORD_SIMILARITY = 0.3
 _PHONE_FIELDS = ("phone", "alternate_phone")
 
 
@@ -42,14 +43,16 @@ async def search_patients(
         )
         order: list[Any] = [Patient.full_name]
     elif q:
-        similarity = name_similarity(Patient.full_name, q)
+        word_score = func.extensions.word_similarity(
+            func.lower(q), func.lower(Patient.full_name), type_=Float
+        )
         stmt = stmt.where(
             or_(
                 Patient.full_name.icontains(q, autoescape=True),
-                similarity > SEARCH_NAME_SIMILARITY,
+                word_score >= SEARCH_WORD_SIMILARITY,
             )
         )
-        order = [similarity.desc(), Patient.full_name]
+        order = [word_score.desc(), name_similarity(Patient.full_name, q).desc(), Patient.full_name]
     else:
         order = [Patient.created_at.desc()]
 

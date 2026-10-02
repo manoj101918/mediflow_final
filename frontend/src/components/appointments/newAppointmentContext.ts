@@ -1,0 +1,18 @@
+import { createContext, useContext } from 'react'
+
+import type { Patient } from '@/types/api'
+
+export type SelectedPatient = Pick<Patient, 'id' | 'full_name' | 'phone' | 'gender' | 'age'>
+
+export interface NewAppointmentContextValue {
+  /** Open the booking sheet, optionally with the patient already chosen. */
+  openNewAppointment: (prefill?: { patient?: SelectedPatient }) => void
+}
+
+export const NewAppointmentContext = createContext<NewAppointmentContextValue | null>(null)
+
+export function useNewAppointment(): NewAppointmentContextValue {
+  const value = useContext(NewAppointmentContext)
+  if (!value) throw new Error('useNewAppointment must be used inside the reception layout')
+  return value
+}

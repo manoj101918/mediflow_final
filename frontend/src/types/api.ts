@@ -140,3 +140,54 @@ export interface DaySlots {
   on_leave: boolean
   slots: Slot[]
 }
+
+// --- Patients -------------------------------------------------------------------------------
+
+export interface Patient {
+  id: string
+  full_name: string
+  phone: string
+  alternate_phone: string | null
+  gender: Gender | null
+  date_of_birth: string | null
+  age_years: number | null
+  /** From date_of_birth when known, else age_years. */
+  age: number | null
+  address: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PatientVisit {
+  id: string
+  starts_at: string
+  appointment_date: string
+  token_number: number
+  status: AppointmentStatus
+  source: AppointmentSource
+  doctor_name: string
+  reason_for_visit: string | null
+}
+
+export interface PatientDetail extends Patient {
+  appointments: PatientVisit[]
+}
+
+export interface PatientInput {
+  full_name: string
+  phone: string
+  alternate_phone: string | null
+  gender: Gender | null
+  date_of_birth: string | null
+  age_years: number | null
+  address: string | null
+  notes: string | null
+}
+
+export type DuplicateReason = 'same_phone' | 'similar_name' | 'same_phone_similar_name'
+
+export interface Duplicate {
+  patient: Patient
+  reason: DuplicateReason
+}

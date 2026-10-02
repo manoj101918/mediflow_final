@@ -7,13 +7,19 @@ import {
   StethoscopeIcon,
   UsersIcon,
 } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { NavLink, Outlet } from 'react-router'
 import { toast } from 'sonner'
 
+import { NewAppointmentSheet } from '@/components/appointments/NewAppointmentSheet'
+import {
+  NewAppointmentContext,
+  type SelectedPatient,
+} from '@/components/appointments/newAppointmentContext'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { useHotkeys } from '@/hooks/useHotkeys'
 import { useRealtimeAppointments } from '@/hooks/useRealtimeAppointments'
 import { doctorKeys } from '@/lib/appointments'
 import { formatTime, formatWeekdayDate, clinicDate } from '@/lib/format'
@@ -73,7 +79,21 @@ export function ReceptionLayout() {
   )
   useRealtimeAppointments(announce)
 
+  const [booking, setBooking] = useState<{ open: boolean; session: number; patient?: SelectedPatient }>({
+    open: false,
+    session: 0,
+  })
+  const newAppointment = useMemo(
+    () => ({
+      openNewAppointment: (prefill?: { patient?: SelectedPatient }) =>
+        setBooking((b) => ({ open: true, session: b.session + 1, patient: prefill?.patient })),
+    }),
+    [],
+  )
+  useHotkeys({ n: () => newAppointment.openNewAppointment() })
+
   return (
+    <NewAppointmentContext value={newAppointment}>
     <div className="flex min-h-svh flex-col bg-muted/30">
       <TopBar>
         <Button
@@ -102,6 +122,13 @@ export function ReceptionLayout() {
           <Nav onNavigate={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>
+      <NewAppointmentSheet
+        open={booking.open}
+        session={booking.session}
+        prefillPatient={booking.patient}
+        onOpenChange={(open) => setBooking((b) => ({ ...b, open }))}
+      />
     </div>
+    </NewAppointmentContext>
   )
 }
