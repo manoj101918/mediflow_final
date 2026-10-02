@@ -56,28 +56,39 @@ class ClaimedJob:
     attempts: int
 
 
-_CLAIM = text(
-    """
+_CLAIM = """
     update public.ingestion_jobs j
     set status = 'processing', attempts = j.attempts + 1, updated_at = now()
     where j.id = (
-      select id from public.ingestion_jobs
-      where (status = 'pending' and run_after <= now())
-         or (status = 'processing' and updated_at < now() - cast(:stale as interval))
-      order by run_after
+      select q.id from public.ingestion_jobs q
+      where ((q.status = 'pending' and q.run_after <= now())
+         or (q.status = 'processing' and q.updated_at < now() - cast(:stale as interval)))
+        and {scope}
+      order by q.run_after
       for update skip locked
       limit 1
     )
     returning j.id, j.clinic_id, j.patient_id, j.source_type::text, j.source_id, j.attempts
-    """
+"""
+_ONE_CLINIC = text(_CLAIM.format(scope="q.clinic_id = :clinic_id"))
+# The background worker leaves pytest's throwaway clinics alone: tests share the dev database
+# and process their own jobs (see tests/conftest.py, clinic names "pytest-clinic-...").
+_ALL_CLINICS = text(
+    _CLAIM.format(
+        scope="not exists (select 1 from public.clinics c "
+        "where c.id = q.clinic_id and c.name like 'pytest-clinic-%')"
+    )
 )
 
 
-async def claim_next(session: AsyncSession) -> ClaimedJob | None:
+async def claim_next(session: AsyncSession, *, clinic_id: UUID | None = None) -> ClaimedJob | None:
     """Claim one due job (commits the claim so other workers skip it)."""
-    row = (
-        await session.execute(_CLAIM, {"stale": f"{int(STALE_PROCESSING.total_seconds())} s"})
-    ).first()
+    stale = STALE_PROCESSING
+    stmt = _ONE_CLINIC if clinic_id is not None else _ALL_CLINICS
+    params: dict[str, object] = {"stale": stale}
+    if clinic_id is not None:
+        params["clinic_id"] = clinic_id
+    row = (await session.execute(stmt, params)).first()
     await session.commit()
     if row is None:
         return None
@@ -129,7 +140,7 @@ async def mark_failed(
             "id": job.id,
             "status": "failed" if give_up else "pending",
             "error": error[:2000],
-            "delay": f"{delay} s",
+            "delay": timedelta(seconds=delay),
         },
     )
     await session.commit()

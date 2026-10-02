@@ -16,15 +16,18 @@ from uuid import UUID
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from langchain_core.embeddings import Embeddings
+from langchain_core.embeddings.fake import DeterministicFakeEmbedding
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
 from app.core.security import InvalidTokenError, TokenClaims, get_jwt_verifier
-from app.db.models import UserRole
+from app.db.models import EMBEDDING_DIM, UserRole
 from app.db.session import build_engine, get_session
 from app.main import create_app
 from app.services.booking.actor import StaffActor, SystemActor, SystemChannel
+from app.services.ingestion.worker import IngestionDeps, run_pending
 from app.services.records.storage import get_report_storage
 from app.services.users import EmailTakenError, get_auth_admin
 
@@ -352,6 +355,58 @@ def report_storage(app: FastAPI) -> FakeReportStorage:
     fake = FakeReportStorage()
     app.dependency_overrides[get_report_storage] = lambda: fake
     return fake
+
+
+TEST_EMBEDDING_MODEL = "pytest-fake"
+
+
+class SpyEmbeddings(Embeddings):
+    """Deterministic fake embeddings that count how many texts were embedded."""
+
+    def __init__(self, dim: int = EMBEDDING_DIM) -> None:
+        self._fake = DeterministicFakeEmbedding(size=dim)
+        self.embedded: list[str] = []
+        self.fail_with: Exception | None = None
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if self.fail_with is not None:
+            raise self.fail_with
+        self.embedded.extend(texts)
+        return self._fake.embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._fake.embed_query(text)
+
+
+@pytest.fixture
+def spy_embeddings() -> SpyEmbeddings:
+    return SpyEmbeddings()
+
+
+@pytest.fixture
+def ingestion(
+    clinic: ClinicFixture, report_storage: FakeReportStorage, spy_embeddings: SpyEmbeddings
+) -> "Ingestion":
+    return Ingestion(
+        clinic,
+        IngestionDeps(
+            embeddings=spy_embeddings,
+            model=TEST_EMBEDDING_MODEL,
+            storage=report_storage,
+            settings=get_settings(),
+        ),
+    )
+
+
+@dataclass
+class Ingestion:
+    """Runs this clinic's pending ingestion jobs with fake embeddings."""
+
+    clinic: ClinicFixture
+    deps: IngestionDeps
+
+    async def run(self) -> int:
+        return await run_pending(self.clinic.sessionmaker, self.deps, clinic_id=self.clinic.id)
 
 
 def auth(user_id: UUID) -> dict[str, str]:

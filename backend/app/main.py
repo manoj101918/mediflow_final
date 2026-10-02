@@ -9,13 +9,22 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import add_request_logging, configure_logging
 from app.core.rate_limit import register_rate_limiting
-from app.db.session import dispose_engine
+from app.db.session import dispose_engine, get_sessionmaker
+from app.services.ingestion.worker import IngestionWorker
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    yield
-    await dispose_engine()
+    settings = get_settings()
+    # One ingestion worker per API process (uvicorn runs without --reload, so this runs once).
+    worker = IngestionWorker(get_sessionmaker(), settings.ingestion_poll_seconds)
+    if settings.ingestion_worker_enabled:
+        worker.start()
+    try:
+        yield
+    finally:
+        await worker.stop()
+        await dispose_engine()
 
 
 def create_app() -> FastAPI:
