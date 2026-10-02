@@ -57,6 +57,8 @@ SEED_USERS: list[SeedUser] = [
         "+919000000013",
         "d0c00000-0000-4000-8000-000000000003",
     ),
+    SeedUser("lab1@mediflow.test", "Suresh Kumar", "lab_technician", "+919000000021"),
+    SeedUser("labhead@mediflow.test", "Dr. Meera Pillai", "lab_supervisor", "+919000000022"),
 ]
 
 
@@ -126,7 +128,7 @@ async def main() -> None:
                     text("update public.doctors set profile_id = :pid where id = :did"),
                     {"pid": user_id, "did": user.doctor_id},
                 )
-            print(f"seeded {user.role:<13} {user.email}")
+            print(f"seeded {user.role:<15} {user.email}")
 
     await dispose_engine()
 

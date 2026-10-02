@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.doctors import to_out as doctor_out
+from app.api.lab_catalog import lab_test_out, lab_test_spec
 from app.api.results import not_found, unwrap
 from app.core.errors import AppError
 from app.deps import AdminUser, DbSession, clinic_today
@@ -16,8 +17,16 @@ from app.schemas.doctors import (
     LeaveIn,
     SchedulesReplace,
 )
+from app.schemas.labs import (
+    ClinicSettingsOut,
+    ClinicSettingsUpdate,
+    LabTestActive,
+    LabTestIn,
+    LabTestOut,
+)
 from app.services import doctors as doctor_service
 from app.services import users as user_service
+from app.services.labs import catalog as lab_catalog
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -139,3 +148,57 @@ async def delete_leave(leave_id: UUID, session: DbSession, admin: AdminUser) -> 
     if not await doctor_service.delete_leave(session, admin.clinic_id, leave_id):
         raise not_found("Leave")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Lab catalog and clinic settings
+# ---------------------------------------------------------------------------
+
+
+@router.get("/lab-tests")
+async def list_lab_tests(session: DbSession, admin: AdminUser) -> list[LabTestOut]:
+    return [lab_test_out(t) for t in await lab_catalog.load_catalog(session, admin.clinic_id)]
+
+
+@router.post("/lab-tests", status_code=status.HTTP_201_CREATED)
+async def create_lab_test(body: LabTestIn, session: DbSession, admin: AdminUser) -> LabTestOut:
+    return lab_test_out(
+        unwrap(await lab_catalog.create_test(session, admin.clinic_id, lab_test_spec(body)))
+    )
+
+
+@router.put("/lab-tests/{test_id}")
+async def update_lab_test(
+    test_id: UUID, body: LabTestIn, session: DbSession, admin: AdminUser
+) -> LabTestOut:
+    return lab_test_out(
+        unwrap(
+            await lab_catalog.update_test(session, admin.clinic_id, test_id, lab_test_spec(body))
+        )
+    )
+
+
+@router.patch("/lab-tests/{test_id}")
+async def set_lab_test_active(
+    test_id: UUID, body: LabTestActive, session: DbSession, admin: AdminUser
+) -> LabTestOut:
+    return lab_test_out(
+        unwrap(await lab_catalog.set_test_active(session, admin.clinic_id, test_id, body.is_active))
+    )
+
+
+@router.get("/clinic-settings")
+async def get_clinic_settings(session: DbSession, admin: AdminUser) -> ClinicSettingsOut:
+    return ClinicSettingsOut(
+        lab_requires_verification=await lab_catalog.requires_verification(session, admin.clinic_id)
+    )
+
+
+@router.put("/clinic-settings")
+async def update_clinic_settings(
+    body: ClinicSettingsUpdate, session: DbSession, admin: AdminUser
+) -> ClinicSettingsOut:
+    value = await lab_catalog.set_requires_verification(
+        session, admin.clinic_id, body.lab_requires_verification
+    )
+    return ClinicSettingsOut(lab_requires_verification=value)

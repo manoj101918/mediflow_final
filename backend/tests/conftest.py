@@ -20,19 +20,20 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langchain_core.embeddings import Embeddings
 from langchain_core.embeddings.fake import DeterministicFakeEmbedding
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.chat import rag_providers
 from app.core.config import get_settings
 from app.core.rate_limit import reset_chat_limits
 from app.core.security import InvalidTokenError, TokenClaims, get_jwt_verifier
-from app.db.models import EMBEDDING_DIM, UserRole
+from app.db.models import EMBEDDING_DIM, LabTest, UserRole
 from app.db.session import build_engine, get_session
 from app.deps import get_session_factory
 from app.main import create_app
 from app.services.booking.actor import StaffActor, SystemActor, SystemChannel
 from app.services.ingestion.worker import IngestionDeps, run_pending
+from app.services.labs.catalog_seed import install_catalog
 from app.services.rag.providers import FakeRecordsChatModel, RagProviders
 from app.services.records.storage import get_report_storage
 from app.services.users import EmailTakenError, get_auth_admin
@@ -233,6 +234,22 @@ class ClinicFixture:
 
     def system(self, channel: SystemChannel = "whatsapp") -> SystemActor:
         return SystemActor(channel=channel, clinic_id=self.id)
+
+    async def add_lab_catalog(self) -> dict[str, UUID]:
+        """The starter lab catalog for this clinic; returns test ids by code."""
+        async with self.sessionmaker() as session:
+            await install_catalog(session, self.id)
+            rows = await session.execute(
+                select(LabTest.code, LabTest.id).where(LabTest.clinic_id == self.id)
+            )
+            return {code: test_id for code, test_id in rows}
+
+    async def set_lab_verification(self, required: bool) -> None:
+        async with self.sessionmaker() as session, session.begin():
+            await session.execute(
+                text("update public.clinics set lab_requires_verification = :v where id = :c"),
+                {"v": required, "c": self.id},
+            )
 
 
 @asynccontextmanager

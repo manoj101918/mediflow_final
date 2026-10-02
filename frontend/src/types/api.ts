@@ -509,3 +509,69 @@ export type ChatStreamEvent =
   | { event: 'citations'; data: { citations: Citation[] } }
   | { event: 'done'; data: { session_id: string; message_id: string } }
   | { event: 'error'; data: { code: string; message: string; session_id: string; message_id: string } }
+
+// ---------------------------------------------------------------------------
+// Lab (Phase 3) — mirrors backend/app/schemas/labs.py
+// ---------------------------------------------------------------------------
+
+export type LabCategory = Enums['lab_category']
+export type LabSampleType = Enums['lab_sample_type']
+export type LabValueType = Enums['lab_value_type']
+export type LabRangeSex = Enums['lab_range_sex']
+
+export interface LabReferenceRangeInput {
+  sex: LabRangeSex
+  age_min_years: number | null
+  age_max_years: number | null
+  low: number | null
+  high: number | null
+  critical_low: number | null
+  critical_high: number | null
+  text_normal: string | null
+}
+
+export interface LabReferenceRange extends LabReferenceRangeInput {
+  id: string
+}
+
+export interface LabParameterInput {
+  /** Set to keep an existing parameter (results reference parameters by id). */
+  id?: string | null
+  code: string
+  name: string
+  unit: string | null
+  value_type: LabValueType
+  choices: string[]
+  decimals: number
+  delta_percent: number | null
+  is_active: boolean
+  ranges: LabReferenceRangeInput[]
+}
+
+export interface LabParameter extends Omit<LabParameterInput, 'id' | 'ranges'> {
+  id: string
+  ranges: LabReferenceRange[]
+}
+
+export interface LabTestInput {
+  code: string
+  name: string
+  category: LabCategory
+  sample_type: LabSampleType
+  container: string | null
+  turnaround_hours: number
+  is_panel: boolean
+  is_active: boolean
+  sort_order: number
+  parameters: LabParameterInput[]
+}
+
+export interface LabTest extends Omit<LabTestInput, 'parameters'> {
+  id: string
+  parameters: LabParameter[]
+  updated_at: string
+}
+
+export interface ClinicSettings {
+  lab_requires_verification: boolean
+}

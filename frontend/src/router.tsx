@@ -16,14 +16,14 @@ function lazyComponent(load: () => Promise<ComponentType>): RouteObject['lazy'] 
 /** A role's area: guard -> lazily loaded layout -> lazily loaded pages. */
 function area(
   path: string,
-  role: UserRole,
+  roles: readonly UserRole[],
   layout: () => Promise<ComponentType>,
   pages: RouteObject[],
 ): RouteObject {
   return {
     path,
     element: (
-      <RequireRole roles={[role]}>
+      <RequireRole roles={roles}>
         <Outlet />
       </RequireRole>
     ),
@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
       { path: '/login', element: <LoginPage /> },
       area(
         '/reception',
-        'receptionist',
+        ['receptionist'],
         () => import('@/components/layout/ReceptionLayout').then((m) => m.ReceptionLayout),
         [
           { index: true, lazy: lazyComponent(() => import('@/pages/reception/Today').then((m) => m.TodayPage)) },
@@ -64,7 +64,7 @@ export const router = createBrowserRouter([
       ),
       area(
         '/doctor',
-        'doctor',
+        ['doctor'],
         () => import('@/components/layout/AppShell').then((m) => m.AppShell),
         [
           { index: true, lazy: lazyComponent(() => import('@/pages/doctor/DoctorToday').then((m) => m.DoctorTodayPage)) },
@@ -76,7 +76,7 @@ export const router = createBrowserRouter([
       ),
       area(
         '/admin',
-        'admin',
+        ['admin'],
         () => import('@/components/layout/AdminLayout').then((m) => m.AdminLayout),
         [
           { index: true, lazy: lazyComponent(() => import('@/pages/admin/Users').then((m) => m.UsersPage)) },
@@ -88,7 +88,21 @@ export const router = createBrowserRouter([
             path: 'doctors/:doctorId',
             lazy: lazyComponent(() => import('@/pages/admin/DoctorManage').then((m) => m.DoctorManagePage)),
           },
+          {
+            path: 'lab-tests',
+            lazy: lazyComponent(() => import('@/pages/admin/LabCatalog').then((m) => m.LabCatalogPage)),
+          },
+          {
+            path: 'lab-tests/:testId',
+            lazy: lazyComponent(() => import('@/pages/admin/LabTestManage').then((m) => m.LabTestManagePage)),
+          },
         ],
+      ),
+      area(
+        '/lab',
+        ['lab_technician', 'lab_supervisor'],
+        () => import('@/components/layout/LabLayout').then((m) => m.LabLayout),
+        [{ index: true, lazy: lazyComponent(() => import('@/pages/lab/LabWorklist').then((m) => m.LabWorklistPage)) }],
       ),
       { path: '*', element: <Navigate to="/" replace /> },
     ],

@@ -48,6 +48,8 @@ const ROLE_TONE: Record<UserRole, string> = {
   admin: 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900',
   receptionist: 'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-200',
   doctor: 'bg-violet-100 text-violet-900 dark:bg-violet-500/20 dark:text-violet-200',
+  lab_technician: 'bg-teal-100 text-teal-900 dark:bg-teal-500/20 dark:text-teal-200',
+  lab_supervisor: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200',
 }
 
 function useStaffMutation<TVars>(fn: (vars: TVars) => Promise<StaffUser>, message: (u: StaffUser) => string) {
@@ -186,7 +188,7 @@ const createSchema = z
     full_name: z.string().trim().min(1, 'Enter a name.').max(120),
     email: z.string().trim().regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, 'Enter a valid email address.'),
     phone: z.string().trim().max(20),
-    role: z.enum(['receptionist', 'doctor', 'admin']),
+    role: z.enum(['receptionist', 'doctor', 'admin', 'lab_technician', 'lab_supervisor']),
     password: z.string().min(8, 'At least 8 characters.').max(72),
     doctor_id: z.string(),
   })
@@ -266,6 +268,8 @@ function AddStaffDialog({ doctors, onClose }: { doctors: Doctor[]; onClose: () =
                       <SelectItem value="receptionist">Receptionist</SelectItem>
                       <SelectItem value="doctor">Doctor</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="lab_technician">Lab technician</SelectItem>
+                      <SelectItem value="lab_supervisor">Lab supervisor</SelectItem>
                     </SelectContent>
                   </Select>
                 )}

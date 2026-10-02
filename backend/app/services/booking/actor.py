@@ -39,6 +39,10 @@ class StaffActor:
     def is_front_desk(self) -> bool:
         return self.role in (UserRole.RECEPTIONIST, UserRole.ADMIN)
 
+    @property
+    def is_lab(self) -> bool:
+        return self.role in (UserRole.LAB_TECHNICIAN, UserRole.LAB_SUPERVISOR)
+
 
 @dataclass(frozen=True)
 class SystemActor:

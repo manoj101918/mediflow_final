@@ -118,6 +118,10 @@ def require_role(*roles: UserRole) -> Callable[[CurrentUser], Awaitable[CurrentU
 
 FrontDeskUser = Annotated[CurrentUser, Depends(require_role(UserRole.RECEPTIONIST, UserRole.ADMIN))]
 AdminUser = Annotated[CurrentUser, Depends(require_role(UserRole.ADMIN))]
+# Lab technicians and supervisors (the supervisor-only steps are decided in the lab service).
+LabUser = Annotated[
+    CurrentUser, Depends(require_role(UserRole.LAB_TECHNICIAN, UserRole.LAB_SUPERVISOR))
+]
 
 
 def staff_actor(user: CurrentUser) -> StaffActor:

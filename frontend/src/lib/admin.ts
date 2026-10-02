@@ -1,7 +1,10 @@
 import { api } from '@/lib/api'
 import type {
+  ClinicSettings,
   Doctor,
   DoctorInput,
+  LabTest,
+  LabTestInput,
   LeaveCreated,
   ShiftInput,
   StaffUser,
@@ -44,3 +47,26 @@ export const addLeave = (doctorId: string, leaveDate: string, reason: string | n
 
 export const deleteLeave = (leaveId: string) =>
   api<void>(`/admin/leaves/${leaveId}`, { method: 'DELETE' })
+
+// Lab catalog and clinic settings. Under 'labs' so the doctor/lab catalog refreshes too.
+export const labAdminKeys = {
+  tests: ['labs', 'admin', 'tests'] as const,
+  settings: ['labs', 'admin', 'settings'] as const,
+}
+
+export const fetchLabTests = (signal?: AbortSignal) => api<LabTest[]>('/admin/lab-tests', { signal })
+
+export const createLabTest = (body: LabTestInput) =>
+  api<LabTest>('/admin/lab-tests', { method: 'POST', body })
+
+export const updateLabTest = (id: string, body: LabTestInput) =>
+  api<LabTest>(`/admin/lab-tests/${id}`, { method: 'PUT', body })
+
+export const setLabTestActive = (id: string, isActive: boolean) =>
+  api<LabTest>(`/admin/lab-tests/${id}`, { method: 'PATCH', body: { is_active: isActive } })
+
+export const fetchClinicSettings = (signal?: AbortSignal) =>
+  api<ClinicSettings>('/admin/clinic-settings', { signal })
+
+export const updateClinicSettings = (body: ClinicSettings) =>
+  api<ClinicSettings>('/admin/clinic-settings', { method: 'PUT', body })

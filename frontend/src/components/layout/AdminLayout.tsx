@@ -1,10 +1,11 @@
-import { StethoscopeIcon, UsersIcon } from 'lucide-react'
+import { FlaskConicalIcon, StethoscopeIcon, UsersIcon } from 'lucide-react'
 
 import { type NavItem, SidebarShell } from '@/components/layout/SidebarShell'
 
 const NAV: NavItem[] = [
   { to: '/admin', label: 'Staff', icon: UsersIcon, end: true },
   { to: '/admin/doctors', label: 'Doctors', icon: StethoscopeIcon },
+  { to: '/admin/lab-tests', label: 'Lab tests', icon: FlaskConicalIcon },
 ]
 
 export function AdminLayout() {

@@ -38,6 +38,8 @@ class UserRole(enum.StrEnum):
     ADMIN = "admin"
     RECEPTIONIST = "receptionist"
     DOCTOR = "doctor"
+    LAB_TECHNICIAN = "lab_technician"
+    LAB_SUPERVISOR = "lab_supervisor"
 
 
 class AppointmentStatus(enum.StrEnum):
@@ -112,6 +114,8 @@ class RecordSourceType(enum.StrEnum):
     PROFILE = "profile"
     CONSULTATION = "consultation"
     REPORT = "report"
+    # Released structured lab results of one order (source_id = lab_orders.id).
+    LAB_RESULT = "lab_result"
 
 
 class JobStatus(enum.StrEnum):
@@ -124,6 +128,35 @@ class JobStatus(enum.StrEnum):
 class ChatRole(enum.StrEnum):
     USER = "user"
     ASSISTANT = "assistant"
+
+
+class LabCategory(enum.StrEnum):
+    HAEMATOLOGY = "haematology"
+    BIOCHEMISTRY = "biochemistry"
+    HORMONES = "hormones"
+    URINE = "urine"
+    SEROLOGY = "serology"
+    OTHER = "other"
+
+
+class LabSampleType(enum.StrEnum):
+    BLOOD = "blood"
+    URINE = "urine"
+    STOOL = "stool"
+    SWAB = "swab"
+    OTHER = "other"
+
+
+class LabValueType(enum.StrEnum):
+    NUMERIC = "numeric"
+    TEXT = "text"
+    CHOICE = "choice"
+
+
+class LabRangeSex(enum.StrEnum):
+    MALE = "male"
+    FEMALE = "female"
+    ANY = "any"
 
 
 class RecordAccessAction(enum.StrEnum):
@@ -181,6 +214,7 @@ class Clinic(Base):
     phone: Mapped[str | None] = mapped_column(Text)
     address: Mapped[str | None] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(Text, server_default=text("'Asia/Kolkata'"))
+    lab_requires_verification: Mapped[bool] = mapped_column(server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
@@ -583,4 +617,73 @@ class PatientRecordAccessLog(Base):
     report_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("patient_reports.id", ondelete="SET NULL")
     )
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: in-house lab
+# ---------------------------------------------------------------------------
+
+
+class LabTest(Base):
+    __tablename__ = "lab_tests"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    category: Mapped[LabCategory] = mapped_column(_pg_enum(LabCategory, "lab_category"))
+    sample_type: Mapped[LabSampleType] = mapped_column(_pg_enum(LabSampleType, "lab_sample_type"))
+    container: Mapped[str | None] = mapped_column(Text)
+    turnaround_hours: Mapped[int] = mapped_column(SmallInteger, server_default=text("24"))
+    is_panel: Mapped[bool] = mapped_column(server_default=text("false"))
+    is_active: Mapped[bool] = mapped_column(server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class LabTestParameter(Base):
+    __tablename__ = "lab_test_parameters"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    test_id: Mapped[UUID] = mapped_column(ForeignKey("lab_tests.id", ondelete="CASCADE"))
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    unit: Mapped[str | None] = mapped_column(Text)
+    value_type: Mapped[LabValueType] = mapped_column(
+        _pg_enum(LabValueType, "lab_value_type"), server_default=text("'numeric'")
+    )
+    choices: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    decimals: Mapped[int] = mapped_column(SmallInteger, server_default=text("1"))
+    delta_percent: Mapped[Decimal | None] = mapped_column(Numeric)
+    is_active: Mapped[bool] = mapped_column(server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class LabReferenceRange(Base):
+    __tablename__ = "lab_reference_ranges"
+
+    id: Mapped[UUID] = _uuid_pk()
+    parameter_id: Mapped[UUID] = mapped_column(
+        ForeignKey("lab_test_parameters.id", ondelete="CASCADE")
+    )
+    sex: Mapped[LabRangeSex] = mapped_column(
+        _pg_enum(LabRangeSex, "lab_range_sex"), server_default=text("'any'")
+    )
+    age_min_years: Mapped[int | None] = mapped_column(SmallInteger)
+    age_max_years: Mapped[int | None] = mapped_column(SmallInteger)
+    low: Mapped[Decimal | None] = mapped_column(Numeric)
+    high: Mapped[Decimal | None] = mapped_column(Numeric)
+    critical_low: Mapped[Decimal | None] = mapped_column(Numeric)
+    critical_high: Mapped[Decimal | None] = mapped_column(Numeric)
+    text_normal: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

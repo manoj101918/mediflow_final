@@ -13,6 +13,9 @@ _UNIQUE_CONSTRAINT_CODES = {
     "appointments_external_ref_key": BookingErrorCode.ALREADY_EXISTS,
     # Only reachable if token assignment bypassed the advisory lock; treat as a lost race.
     "appointments_doctor_day_token_key": BookingErrorCode.SLOT_TAKEN,
+    # Lab catalog codes are unique per clinic (tests) and per test (parameters).
+    "lab_tests_clinic_code_key": BookingErrorCode.ALREADY_EXISTS,
+    "lab_test_parameters_test_code_key": BookingErrorCode.ALREADY_EXISTS,
 }
 
 

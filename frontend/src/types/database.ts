@@ -169,6 +169,7 @@ export type Database = {
           address: string | null
           created_at: string
           id: string
+          lab_requires_verification: boolean
           name: string
           phone: string | null
           timezone: string
@@ -177,6 +178,7 @@ export type Database = {
           address?: string | null
           created_at?: string
           id?: string
+          lab_requires_verification?: boolean
           name: string
           phone?: string | null
           timezone?: string
@@ -185,6 +187,7 @@ export type Database = {
           address?: string | null
           created_at?: string
           id?: string
+          lab_requires_verification?: boolean
           name?: string
           phone?: string | null
           timezone?: string
@@ -603,6 +606,168 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_reference_ranges: {
+        Row: {
+          age_max_years: number | null
+          age_min_years: number | null
+          created_at: string
+          critical_high: number | null
+          critical_low: number | null
+          high: number | null
+          id: string
+          low: number | null
+          parameter_id: string
+          sex: Database["public"]["Enums"]["lab_range_sex"]
+          text_normal: string | null
+        }
+        Insert: {
+          age_max_years?: number | null
+          age_min_years?: number | null
+          created_at?: string
+          critical_high?: number | null
+          critical_low?: number | null
+          high?: number | null
+          id?: string
+          low?: number | null
+          parameter_id: string
+          sex?: Database["public"]["Enums"]["lab_range_sex"]
+          text_normal?: string | null
+        }
+        Update: {
+          age_max_years?: number | null
+          age_min_years?: number | null
+          created_at?: string
+          critical_high?: number | null
+          critical_low?: number | null
+          high?: number | null
+          id?: string
+          low?: number | null
+          parameter_id?: string
+          sex?: Database["public"]["Enums"]["lab_range_sex"]
+          text_normal?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_reference_ranges_parameter_id_fkey"
+            columns: ["parameter_id"]
+            isOneToOne: false
+            referencedRelation: "lab_test_parameters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_test_parameters: {
+        Row: {
+          choices: string[]
+          code: string
+          created_at: string
+          decimals: number
+          delta_percent: number | null
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          test_id: string
+          unit: string | null
+          updated_at: string
+          value_type: Database["public"]["Enums"]["lab_value_type"]
+        }
+        Insert: {
+          choices?: string[]
+          code: string
+          created_at?: string
+          decimals?: number
+          delta_percent?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          test_id: string
+          unit?: string | null
+          updated_at?: string
+          value_type?: Database["public"]["Enums"]["lab_value_type"]
+        }
+        Update: {
+          choices?: string[]
+          code?: string
+          created_at?: string
+          decimals?: number
+          delta_percent?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          test_id?: string
+          unit?: string | null
+          updated_at?: string
+          value_type?: Database["public"]["Enums"]["lab_value_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_test_parameters_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "lab_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_tests: {
+        Row: {
+          category: Database["public"]["Enums"]["lab_category"]
+          clinic_id: string
+          code: string
+          container: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          is_panel: boolean
+          name: string
+          sample_type: Database["public"]["Enums"]["lab_sample_type"]
+          sort_order: number
+          turnaround_hours: number
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["lab_category"]
+          clinic_id: string
+          code: string
+          container?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_panel?: boolean
+          name: string
+          sample_type: Database["public"]["Enums"]["lab_sample_type"]
+          sort_order?: number
+          turnaround_hours?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["lab_category"]
+          clinic_id?: string
+          code?: string
+          container?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_panel?: boolean
+          name?: string
+          sample_type?: Database["public"]["Enums"]["lab_sample_type"]
+          sort_order?: number
+          turnaround_hours?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_tests_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
         ]
@@ -1264,12 +1429,22 @@ export type Database = {
         | "failed"
         | "no_text"
       job_status: "pending" | "processing" | "done" | "failed"
+      lab_category:
+        | "haematology"
+        | "biochemistry"
+        | "hormones"
+        | "urine"
+        | "serology"
+        | "other"
+      lab_range_sex: "male" | "female" | "any"
+      lab_sample_type: "blood" | "urine" | "stool" | "swab" | "other"
+      lab_value_type: "numeric" | "text" | "choice"
       record_access_action:
         | "chart_open"
         | "chat_question"
         | "report_view"
         | "report_upload"
-      record_source_type: "profile" | "consultation" | "report"
+      record_source_type: "profile" | "consultation" | "report" | "lab_result"
       report_type:
         | "lab"
         | "imaging"
@@ -1277,7 +1452,12 @@ export type Database = {
         | "referral"
         | "old_prescription"
         | "other"
-      user_role: "admin" | "receptionist" | "doctor"
+      user_role:
+        | "admin"
+        | "receptionist"
+        | "doctor"
+        | "lab_technician"
+        | "lab_supervisor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1430,13 +1610,24 @@ export const Constants = {
         "no_text",
       ],
       job_status: ["pending", "processing", "done", "failed"],
+      lab_category: [
+        "haematology",
+        "biochemistry",
+        "hormones",
+        "urine",
+        "serology",
+        "other",
+      ],
+      lab_range_sex: ["male", "female", "any"],
+      lab_sample_type: ["blood", "urine", "stool", "swab", "other"],
+      lab_value_type: ["numeric", "text", "choice"],
       record_access_action: [
         "chart_open",
         "chat_question",
         "report_view",
         "report_upload",
       ],
-      record_source_type: ["profile", "consultation", "report"],
+      record_source_type: ["profile", "consultation", "report", "lab_result"],
       report_type: [
         "lab",
         "imaging",
@@ -1445,7 +1636,13 @@ export const Constants = {
         "old_prescription",
         "other",
       ],
-      user_role: ["admin", "receptionist", "doctor"],
+      user_role: [
+        "admin",
+        "receptionist",
+        "doctor",
+        "lab_technician",
+        "lab_supervisor",
+      ],
     },
   },
 } as const
