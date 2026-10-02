@@ -1,9 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarDaysIcon, LayoutDashboardIcon, StethoscopeIcon, UsersIcon } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { NewAppointmentSheet } from '@/components/appointments/NewAppointmentSheet'
 import {
   NewAppointmentContext,
   type NewAppointmentPrefill,
@@ -14,6 +13,11 @@ import { type AppointmentRow, useRealtimeAppointments } from '@/hooks/useRealtim
 import { doctorKeys } from '@/lib/appointments'
 import { clinicDate, formatTime, formatWeekdayDate } from '@/lib/format'
 import type { Doctor } from '@/types/api'
+
+// The booking sheet (calendar, forms) loads the first time it is opened.
+const NewAppointmentSheet = lazy(() =>
+  import('@/components/appointments/NewAppointmentSheet').then((m) => ({ default: m.NewAppointmentSheet })),
+)
 
 const NAV: NavItem[] = [
   { to: '/reception', label: 'Today', icon: LayoutDashboardIcon, end: true },
@@ -59,13 +63,17 @@ export function ReceptionLayout() {
   return (
     <NewAppointmentContext value={newAppointment}>
       <SidebarShell items={NAV} label="Reception">
-        <NewAppointmentSheet
-          open={booking.open}
-          session={booking.session}
-          prefillPatient={booking.prefill?.patient}
-          prefillSearch={booking.prefill?.search}
-          onOpenChange={(open) => setBooking((b) => ({ ...b, open }))}
-        />
+        {booking.session > 0 && (
+          <Suspense fallback={null}>
+            <NewAppointmentSheet
+              open={booking.open}
+              session={booking.session}
+              prefillPatient={booking.prefill?.patient}
+              prefillSearch={booking.prefill?.search}
+              onOpenChange={(open) => setBooking((b) => ({ ...b, open }))}
+            />
+          </Suspense>
+        )}
       </SidebarShell>
     </NewAppointmentContext>
   )

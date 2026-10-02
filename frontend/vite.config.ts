@@ -10,4 +10,9 @@ export default defineConfig({
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },
   server: { port: 5173, strictPort: true },
+  build: {
+    // Pages and the booking sheet are split out; the entry chunk is the shared runtime every
+    // screen needs (React DOM, router, supabase-js, react-query, zod): ~150 kB gzipped.
+    chunkSizeWarningLimit: 550,
+  },
 })

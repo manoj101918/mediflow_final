@@ -1,61 +1,90 @@
-import { Navigate, createBrowserRouter } from 'react-router'
+import type { ComponentType } from 'react'
+import { Navigate, Outlet, type RouteObject, createBrowserRouter } from 'react-router'
 
 import { RequireRole, RootRedirect } from '@/auth/RequireRole'
-import { AppShell } from '@/components/layout/AppShell'
-import { AdminLayout } from '@/components/layout/AdminLayout'
-import { ReceptionLayout } from '@/components/layout/ReceptionLayout'
+import { RouteError } from '@/components/layout/RouteError'
+import { FullPageLoader } from '@/components/layout/StatusScreens'
 import { LoginPage } from '@/pages/Login'
-import { DoctorManagePage } from '@/pages/admin/DoctorManage'
-import { AdminDoctorsPage } from '@/pages/admin/Doctors'
-import { UsersPage } from '@/pages/admin/Users'
-import { DoctorTodayPage } from '@/pages/doctor/DoctorToday'
-import { AppointmentsPage } from '@/pages/reception/Appointments'
-import { DoctorsPage } from '@/pages/reception/Doctors'
-import { PatientDetailPage } from '@/pages/reception/PatientDetail'
-import { PatientsPage } from '@/pages/reception/Patients'
-import { TodayPage } from '@/pages/reception/Today'
+import type { UserRole } from '@/types/api'
+
+// Code-split: the login screen loads alone; each role downloads only its own layout and the
+// pages it opens.
+function lazyComponent(load: () => Promise<ComponentType>): RouteObject['lazy'] {
+  return async () => ({ Component: await load() })
+}
+
+/** A role's area: guard -> lazily loaded layout -> lazily loaded pages. */
+function area(
+  path: string,
+  role: UserRole,
+  layout: () => Promise<ComponentType>,
+  pages: RouteObject[],
+): RouteObject {
+  return {
+    path,
+    element: (
+      <RequireRole roles={[role]}>
+        <Outlet />
+      </RequireRole>
+    ),
+    children: [{ lazy: lazyComponent(layout), children: pages }],
+  }
+}
 
 export const router = createBrowserRouter([
-  { path: '/', element: <RootRedirect /> },
-  { path: '/login', element: <LoginPage /> },
   {
-    path: '/reception',
-    element: (
-      <RequireRole roles={['receptionist']}>
-        <ReceptionLayout />
-      </RequireRole>
-    ),
+    errorElement: <RouteError />,
+    hydrateFallbackElement: <FullPageLoader />,
     children: [
-      { index: true, element: <TodayPage /> },
-      { path: 'appointments', element: <AppointmentsPage /> },
-      { path: 'patients', element: <PatientsPage /> },
-      { path: 'patients/:patientId', element: <PatientDetailPage /> },
-      { path: 'doctors', element: <DoctorsPage /> },
+      { path: '/', element: <RootRedirect /> },
+      { path: '/login', element: <LoginPage /> },
+      area(
+        '/reception',
+        'receptionist',
+        () => import('@/components/layout/ReceptionLayout').then((m) => m.ReceptionLayout),
+        [
+          { index: true, lazy: lazyComponent(() => import('@/pages/reception/Today').then((m) => m.TodayPage)) },
+          {
+            path: 'appointments',
+            lazy: lazyComponent(() => import('@/pages/reception/Appointments').then((m) => m.AppointmentsPage)),
+          },
+          {
+            path: 'patients',
+            lazy: lazyComponent(() => import('@/pages/reception/Patients').then((m) => m.PatientsPage)),
+          },
+          {
+            path: 'patients/:patientId',
+            lazy: lazyComponent(() => import('@/pages/reception/PatientDetail').then((m) => m.PatientDetailPage)),
+          },
+          {
+            path: 'doctors',
+            lazy: lazyComponent(() => import('@/pages/reception/Doctors').then((m) => m.DoctorsPage)),
+          },
+        ],
+      ),
+      area(
+        '/doctor',
+        'doctor',
+        () => import('@/components/layout/AppShell').then((m) => m.AppShell),
+        [{ index: true, lazy: lazyComponent(() => import('@/pages/doctor/DoctorToday').then((m) => m.DoctorTodayPage)) }],
+      ),
+      area(
+        '/admin',
+        'admin',
+        () => import('@/components/layout/AdminLayout').then((m) => m.AdminLayout),
+        [
+          { index: true, lazy: lazyComponent(() => import('@/pages/admin/Users').then((m) => m.UsersPage)) },
+          {
+            path: 'doctors',
+            lazy: lazyComponent(() => import('@/pages/admin/Doctors').then((m) => m.AdminDoctorsPage)),
+          },
+          {
+            path: 'doctors/:doctorId',
+            lazy: lazyComponent(() => import('@/pages/admin/DoctorManage').then((m) => m.DoctorManagePage)),
+          },
+        ],
+      ),
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
-  {
-    path: '/doctor',
-    element: (
-      <RequireRole roles={['doctor']}>
-        <AppShell />
-      </RequireRole>
-    ),
-    children: [
-      { index: true, element: <DoctorTodayPage /> },
-    ],
-  },
-  {
-    path: '/admin',
-    element: (
-      <RequireRole roles={['admin']}>
-        <AdminLayout />
-      </RequireRole>
-    ),
-    children: [
-      { index: true, element: <UsersPage /> },
-      { path: 'doctors', element: <AdminDoctorsPage /> },
-      { path: 'doctors/:doctorId', element: <DoctorManagePage /> },
-    ],
-  },
-  { path: '*', element: <Navigate to="/" replace /> },
 ])
