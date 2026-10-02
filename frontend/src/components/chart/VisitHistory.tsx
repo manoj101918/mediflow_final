@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { VisitDetails } from '@/components/chart/VisitDetails'
+import { LabOrderResults } from '@/components/labs/LabOrderResults'
+import { usePatientLabResults } from '@/hooks/usePatientLabResults'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,7 +18,7 @@ import { formatDate } from '@/lib/format'
 import { addAddendum, fetchHistory, recordKeys } from '@/lib/records'
 import { INGESTION_META } from '@/lib/reports'
 import { cn } from '@/lib/utils'
-import type { HistoryVisit } from '@/types/api'
+import type { HistoryVisit, LabOrder } from '@/types/api'
 
 const ALL = 'all'
 
@@ -32,6 +34,7 @@ export function VisitHistory({ patientId, focus, onOpenReport }: Props) {
     queryKey: recordKeys.history(patientId),
     queryFn: ({ signal }) => fetchHistory(patientId, signal),
   })
+  const labs = usePatientLabResults(patientId)
   const [doctor, setDoctor] = useState(ALL)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -94,6 +97,7 @@ export function VisitHistory({ patientId, focus, onOpenReport }: Props) {
             defaultOpen={index === 0}
             focusToken={focus?.id === visit.consultation_id ? focus.token : null}
             onOpenReport={onOpenReport}
+            labOrders={(labs.data ?? []).filter((o) => o.appointment_id === visit.appointment_id)}
           />
         ))}
       </ol>
@@ -107,8 +111,10 @@ function VisitCard({
   defaultOpen,
   focusToken,
   onOpenReport,
+  labOrders,
 }: {
   visit: HistoryVisit
+  labOrders: LabOrder[]
   patientId: string
   defaultOpen: boolean
   focusToken: number | null
@@ -151,6 +157,14 @@ function VisitCard({
       {open && (
         <div className="space-y-3 border-t p-3">
           <VisitDetails visit={visit} />
+          {labOrders.length > 0 && (
+            <div className="space-y-2 rounded-lg bg-muted/40 p-2" data-visit-labs>
+              <p className="text-xs font-medium text-muted-foreground">Lab tests ordered at this visit</p>
+              {labOrders.map((order) => (
+                <LabOrderResults key={order.id} order={order} onOpenReport={onOpenReport} compact />
+              ))}
+            </div>
+          )}
           {visit.reports.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {visit.reports.map((report) => (

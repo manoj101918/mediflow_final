@@ -12,6 +12,7 @@ import { ReportsTab } from '@/components/chart/ReportsTab'
 import { useReports } from '@/hooks/useReports'
 import { VisitHistory } from '@/components/chart/VisitHistory'
 import { VitalsTrend } from '@/components/chart/VitalsTrend'
+import { LabResultsTab } from '@/components/labs/LabResultsTab'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -19,12 +20,14 @@ import { ApiError } from '@/lib/api'
 import { fetchChart, recordKeys } from '@/lib/records'
 import type { Citation } from '@/types/api'
 
-type Tab = 'current' | 'history' | 'medications' | 'reports' | 'vitals'
+type Tab = 'current' | 'history' | 'labs' | 'medications' | 'reports' | 'vitals'
 
 export function PatientChartPage() {
   const { patientId = '' } = useParams()
   const [params] = useSearchParams()
   const appointmentId = params.get('appointment') ?? undefined
+  // ?labs=<order id> (from the results inbox) opens the Lab results tab on that order.
+  const labsOrder = params.get('labs')
 
   const chart = useQuery({
     queryKey: recordKeys.chart(patientId, appointmentId),
@@ -33,7 +36,10 @@ export function PatientChartPage() {
   })
   const reports = useReports(patientId)
 
-  const [tab, setTab] = useState<Tab>(appointmentId ? 'current' : 'history')
+  const [tab, setTab] = useState<Tab>(labsOrder ? 'labs' : appointmentId ? 'current' : 'history')
+  const [focusLab, setFocusLab] = useState<{ orderId?: string | null; itemId?: string | null; token: number } | null>(
+    labsOrder ? { orderId: labsOrder, token: 0 } : null,
+  )
   const [focusVisit, setFocusVisit] = useState<{ id: string; token: number } | null>(null)
   const [viewing, setViewing] = useState<OpenReport | null>(null)
   const header = useRef<HTMLDivElement>(null)
@@ -52,6 +58,9 @@ export function PatientChartPage() {
       if (citation.source_type === 'consultation') {
         setTab('history')
         setFocusVisit({ id: citation.source_id, token: Date.now() })
+      } else if (citation.source_type === 'lab_result') {
+        setTab('labs')
+        setFocusLab({ orderId: citation.source_id, itemId: citation.item_id ?? null, token: Date.now() })
       } else if (citation.source_type === 'report') {
         openReport(citation.source_id, citation.page)
       } else {
@@ -99,6 +108,7 @@ export function PatientChartPage() {
           <TabsList className="flex-wrap">
             {hasVisit && <TabsTrigger value="current">Current visit</TabsTrigger>}
             <TabsTrigger value="history">Visit history</TabsTrigger>
+            <TabsTrigger value="labs">Lab results</TabsTrigger>
             <TabsTrigger value="medications">Medications</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
             <TabsTrigger value="vitals">Vitals trend</TabsTrigger>
@@ -110,6 +120,9 @@ export function PatientChartPage() {
           )}
           <TabsContent value="history">
             <VisitHistory patientId={patientId} focus={focusVisit} onOpenReport={(id) => openReport(id)} />
+          </TabsContent>
+          <TabsContent value="labs">
+            <LabResultsTab patientId={patientId} focus={focusLab} onOpenReport={(id) => openReport(id)} />
           </TabsContent>
           <TabsContent value="medications">
             <MedicationsTab patientId={patientId} />

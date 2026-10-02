@@ -8,6 +8,8 @@ import { useAuth } from '@/auth/context'
 import { StatusBadge } from '@/components/appointments/Badges'
 import { useAppointmentMutation } from '@/components/appointments/useAppointmentMutation'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
+import { LabCountsBadge } from '@/components/labs/LabBadges'
+import { LabResultsInbox } from '@/components/labs/LabResultsInbox'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -15,10 +17,11 @@ import { useNow } from '@/hooks/useNow'
 import { type AppointmentChange, useRealtimeAppointments } from '@/hooks/useRealtimeAppointments'
 import { ApiError } from '@/lib/api'
 import { appointmentKeys, changeStatus, fetchDayAppointments } from '@/lib/appointments'
+import { fetchLabSummary, labKeys } from '@/lib/labs'
 import { completeVisit, fetchVisit } from '@/lib/records'
 import { clinicDate, formatPatientMeta, formatTime, formatWeekdayDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { Appointment, AppointmentStatus } from '@/types/api'
+import type { Appointment, AppointmentStatus, LabStatusCounts } from '@/types/api'
 
 const byToken = (a: Appointment, b: Appointment) => a.token_number - b.token_number
 const byTime = (a: Appointment, b: Appointment) => a.starts_at.localeCompare(b.starts_at) || byToken(a, b)
@@ -51,6 +54,14 @@ export function DoctorTodayPage() {
     enabled: Boolean(me?.doctor_id),
     refetchInterval: 60_000,
   })
+
+  // Lab test counts per appointment (statuses only); refreshed live by the doctor layout.
+  const labSummary = useQuery({
+    queryKey: labKeys.summary(today),
+    queryFn: ({ signal }) => fetchLabSummary(today, signal),
+    enabled: Boolean(me?.doctor_id),
+  })
+  const labCounts = new Map((labSummary.data ?? []).map((c) => [c.appointment_id, c]))
 
   const navigate = useNavigate()
   const chartPath = (a: Appointment) => `/doctor/patients/${a.patient.id}?appointment=${a.id}`
@@ -140,7 +151,7 @@ export function DoctorTodayPage() {
                 </p>
               ) : (
                 current.map((a) => (
-                  <PatientRow key={a.id} appointment={a} large chartPath={chartPath(a)}>
+                  <PatientRow key={a.id} appointment={a} large chartPath={chartPath(a)} labCounts={labCounts.get(a.id)}>
                     <Button asChild size="lg" variant="outline">
                       <Link to={chartPath(a)}>
                         <ClipboardListIcon />
@@ -173,7 +184,7 @@ export function DoctorTodayPage() {
                 <ul className="divide-y">
                   {waiting.map((a, i) => (
                     <li key={a.id} className="py-2 first:pt-0 last:pb-0">
-                      <PatientRow appointment={a} chartPath={chartPath(a)}>
+                      <PatientRow appointment={a} chartPath={chartPath(a)} labCounts={labCounts.get(a.id)}>
                         <Button
                           variant={i === 0 ? 'default' : 'outline'}
                           disabled={busyId === a.id}
@@ -216,6 +227,8 @@ export function DoctorTodayPage() {
             </CardContent>
           </Card>
 
+          <LabResultsInbox />
+
           {finished.length > 0 && (
             <details className="rounded-xl border bg-background p-4">
               <summary className="cursor-pointer text-sm font-medium">Finished ({finished.length})</summary>
@@ -224,7 +237,12 @@ export function DoctorTodayPage() {
                   <li key={a.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-muted-foreground">
                     <span className="w-20 tabular-nums">{formatTime(a.starts_at)}</span>
                     <span className="w-10 tabular-nums">#{a.token_number}</span>
-                    <span className="flex-1 text-foreground">{a.patient.full_name}</span>
+                    <span className="flex-1 text-foreground">
+                      <Link to={chartPath(a)} className="hover:underline" data-appointment-id={a.id}>
+                        {a.patient.full_name}
+                      </Link>
+                    </span>
+                    <LabCountsBadge counts={labCounts.get(a.id)} />
                     <StatusBadge status={a.status} />
                   </li>
                 ))}
@@ -259,10 +277,12 @@ function PatientRow({
   appointment: a,
   large,
   chartPath,
+  labCounts,
   children,
 }: {
   appointment: Appointment
   large?: boolean
+  labCounts?: LabStatusCounts
   /** When set, the patient's name opens their chart. */
   chartPath?: string
   children: ReactNode
@@ -291,6 +311,7 @@ function PatientRow({
           <span className="text-sm font-normal text-muted-foreground">
             {formatPatientMeta(a.patient.gender, a.patient.age)}
           </span>
+          <LabCountsBadge counts={labCounts} />
         </div>
         <div className="text-sm text-muted-foreground">
           {formatTime(a.starts_at)} · {a.reason_for_visit ?? 'No reason given'}

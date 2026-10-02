@@ -65,7 +65,7 @@ export const router = createBrowserRouter([
       area(
         '/doctor',
         ['doctor'],
-        () => import('@/components/layout/AppShell').then((m) => m.AppShell),
+        () => import('@/components/layout/DoctorLayout').then((m) => m.DoctorLayout),
         [
           { index: true, lazy: lazyComponent(() => import('@/pages/doctor/DoctorToday').then((m) => m.DoctorTodayPage)) },
           {
@@ -102,8 +102,24 @@ export const router = createBrowserRouter([
         '/lab',
         ['lab_technician', 'lab_supervisor'],
         () => import('@/components/layout/LabLayout').then((m) => m.LabLayout),
-        [{ index: true, lazy: lazyComponent(() => import('@/pages/lab/LabWorklist').then((m) => m.LabWorklistPage)) }],
+        [
+          { index: true, lazy: lazyComponent(() => import('@/pages/lab/LabWorklist').then((m) => m.LabWorklistPage)) },
+          {
+            path: 'orders/:orderId',
+            lazy: lazyComponent(() => import('@/pages/lab/LabOrder').then((m) => m.LabOrderPage)),
+          },
+        ],
       ),
+      // Tube labels print without the app chrome.
+      {
+        path: '/lab/orders/:orderId/labels',
+        element: (
+          <RequireRole roles={['lab_technician', 'lab_supervisor']}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [{ index: true, lazy: lazyComponent(() => import('@/pages/lab/LabLabels').then((m) => m.LabLabelsPage)) }],
+      },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },

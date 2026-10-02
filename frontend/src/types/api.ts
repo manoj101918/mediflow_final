@@ -474,7 +474,7 @@ export interface ReportUrl {
 // --- Patient chat (assistant) ---------------------------------------------------------------
 // Mirrors backend/app/schemas/chat.py.
 
-export type CitationSourceType = 'summary' | 'profile' | 'consultation' | 'report'
+export type CitationSourceType = 'summary' | 'profile' | 'consultation' | 'report' | 'lab_result'
 
 /** What an [n] marker in an answer points at. */
 export interface Citation {
@@ -485,6 +485,8 @@ export interface Citation {
   /** YYYY-MM-DD */
   date: string | null
   page: number | null
+  /** lab_result: the cited test (source_id is its lab order). */
+  item_id?: string | null
 }
 
 export interface ChatSession {
@@ -574,4 +576,219 @@ export interface LabTest extends Omit<LabTestInput, 'parameters'> {
 
 export interface ClinicSettings {
   lab_requires_verification: boolean
+}
+
+export type LabPriority = Enums['lab_priority']
+export type LabOrderStatus = Enums['lab_order_status']
+export type LabItemStatus = Enums['lab_item_status']
+export type LabFlag = Enums['lab_flag']
+
+export interface LabResult {
+  id: string
+  parameter_id: string
+  parameter_code: string
+  parameter_name: string
+  unit: string | null
+  value_type: LabValueType
+  value_numeric: number | null
+  value_text: string | null
+  range_label: string | null
+  ref_low: number | null
+  ref_high: number | null
+  flag: LabFlag | null
+  version: number
+  is_current: boolean
+  amended_reason: string | null
+  entered_at: string
+}
+
+export interface LabSample {
+  id: string
+  sample_code: string
+  sample_type: LabSampleType
+  container: string | null
+  collected_at: string
+  rejected_at: string | null
+  rejected_reason: string | null
+}
+
+export interface LabItem {
+  id: string
+  test_id: string
+  test_code: string
+  test_name: string
+  status: LabItemStatus
+  sample_id: string | null
+  sample_code: string | null
+  rejection_reason: string | null
+  return_comment: string | null
+  entered_at: string | null
+  verified_at: string | null
+  released_at: string | null
+  cancelled_reason: string | null
+  /** Current values. Doctors get released tests only. */
+  results: LabResult[]
+  /** Earlier versions of amended results. */
+  history: LabResult[]
+}
+
+export interface LabOrder {
+  id: string
+  order_number: string
+  patient_id: string
+  patient_name: string
+  appointment_id: string
+  consultation_id: string | null
+  ordering_doctor_id: string
+  ordering_doctor_name: string
+  priority: LabPriority
+  status: LabOrderStatus
+  clinical_note: string | null
+  cancelled_reason: string | null
+  reviewed_at: string | null
+  report_id: string | null
+  created_at: string
+  updated_at: string
+  items: LabItem[]
+  samples: LabSample[]
+}
+
+export interface LabOrderInput {
+  test_ids: string[]
+  priority: LabPriority
+  clinical_note: string | null
+}
+
+/** Front desk view: no clinical note and no values. */
+export interface LabOrderStatusRow {
+  id: string
+  order_number: string
+  appointment_id: string
+  ordering_doctor_name: string
+  priority: LabPriority
+  status: LabOrderStatus
+  created_at: string
+  tests: { test_name: string; status: LabItemStatus }[]
+}
+
+export interface LabStatusCounts {
+  appointment_id: string
+  pending: number
+  ready: number
+}
+
+export interface LabPatient {
+  id: string
+  full_name: string
+  phone: string
+  gender: Gender | null
+  age: number | null
+}
+
+export interface LabRange {
+  low: number | null
+  high: number | null
+  critical_low: number | null
+  critical_high: number | null
+  text_normal: string | null
+  label: string | null
+}
+
+export interface LabPrevious {
+  value_numeric: number | null
+  value_text: string | null
+  unit: string | null
+  flag: LabFlag | null
+  released_at: string
+  order_number: string
+}
+
+export interface LabParameterEntry {
+  id: string
+  code: string
+  name: string
+  unit: string | null
+  value_type: LabValueType
+  choices: string[]
+  decimals: number
+  delta_percent: number | null
+  range: LabRange | null
+  previous: LabPrevious | null
+  delta_warning: boolean
+}
+
+export interface LabItemDetail extends LabItem {
+  category: LabCategory
+  sample_type: LabSampleType
+  container: string | null
+  parameters: LabParameterEntry[]
+}
+
+export interface LabOrderDetail {
+  order: LabOrder
+  patient: LabPatient
+  requires_verification: boolean
+  items: LabItemDetail[]
+}
+
+export type LabWorklistTab = 'to_collect' | 'in_progress' | 'awaiting_verification' | 'released_today' | 'rejected'
+
+export interface LabWorklistRow {
+  order_id: string
+  order_number: string
+  priority: LabPriority
+  status: LabOrderStatus
+  created_at: string
+  patient_id: string
+  patient_name: string
+  patient_phone: string
+  patient_gender: Gender | null
+  patient_age: number | null
+  ordering_doctor_name: string
+  counts: Partial<Record<LabItemStatus, number>>
+  tests: string[]
+  sample_codes: string[]
+}
+
+export interface LabValueInput {
+  parameter_id: string
+  value: number | string | null
+}
+
+export interface LabTrendPoint {
+  value: number
+  flag: LabFlag | null
+  ref_low: number | null
+  ref_high: number | null
+  released_at: string
+  order_id: string
+  order_item_id: string
+  order_number: string
+}
+
+export interface LabTrend {
+  code: string
+  name: string
+  unit: string | null
+  points: LabTrendPoint[]
+}
+
+export interface LabInboxRow {
+  order: LabOrder
+  abnormal: number
+  critical: number
+}
+
+export interface LabAlert {
+  id: string
+  patient_id: string
+  patient_name: string
+  order_id: string
+  order_number: string
+  parameter_name: string
+  value: string
+  unit: string | null
+  flag: LabFlag | null
+  range_label: string | null
+  created_at: string
 }

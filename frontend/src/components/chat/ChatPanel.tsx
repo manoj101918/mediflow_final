@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircleIcon,
   FileTextIcon,
+  FlaskConicalIcon,
   Loader2Icon,
   MessageSquarePlusIcon,
   SendHorizontalIcon,
@@ -276,6 +277,7 @@ function Bubble({ message: m, onCite }: { message: UiMessage; onCite: (c: Citati
               >
                 <span className="font-semibold text-primary">{c.n}</span>
                 {c.source_type === 'report' && <FileTextIcon className="size-3" />}
+                {c.source_type === 'lab_result' && <FlaskConicalIcon className="size-3" />}
                 <span className="truncate">{c.label}</span>
                 {c.date && c.source_type !== 'summary' && (
                   <span className="text-muted-foreground">· {formatDate(c.date)}</span>

@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { ReportUploadDialog } from '@/components/chart/ReportUploadDialog'
+import { OrderTestsPanel } from '@/components/labs/OrderTestsPanel'
 import { VisitDetails } from '@/components/chart/VisitDetails'
 import { PrescriptionBuilder } from '@/components/chart/PrescriptionBuilder'
 import { type ItemDraft, itemFromServer } from '@/lib/prescriptionDraft'
@@ -129,8 +130,16 @@ export function CurrentVisit({ patientId, appointmentId }: Props) {
 
   if (visit.isPending) return <Skeleton className="h-96" />
   if (visit.isError) return <p className="text-sm text-destructive">{visit.error.message}</p>
-  if (!visit.data.editable) return <ReadOnlyVisit visit={visit.data} />
-  return <VisitForm key={appointmentId} visit={visit.data} patientId={patientId} />
+  return (
+    <div className="space-y-4">
+      {visit.data.editable ? (
+        <VisitForm key={appointmentId} visit={visit.data} patientId={patientId} />
+      ) : (
+        <ReadOnlyVisit visit={visit.data} />
+      )}
+      <OrderTestsPanel patientId={patientId} appointmentId={appointmentId} canOrder={visit.data.editable} />
+    </div>
+  )
 }
 
 function ReadOnlyVisit({ visit }: { visit: Visit }) {
