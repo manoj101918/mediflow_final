@@ -51,28 +51,32 @@ async function handleUnauthorized(): Promise<void> {
   }
 }
 
-/** Calls the FastAPI backend with the current Supabase access token. */
-export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/** The Authorization header for the current session (empty when signed out). */
+export async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  if (token) headers.Authorization = `Bearer ${token}`
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
-
-  let response: Response
+/** Raw fetch against the API with auth; network failures become ApiError('NETWORK'). */
+export async function apiFetch(
+  path: string,
+  init: RequestInit & { query?: Record<string, QueryValue> } = {},
+): Promise<Response> {
+  const { query, headers, ...rest } = init
   try {
-    response = await fetch(buildUrl(path, options.query), {
-      method: options.method ?? 'GET',
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
+    return await fetch(buildUrl(path, query), {
+      ...rest,
+      headers: { ...(await authHeaders()), ...(headers as Record<string, string> | undefined) },
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new ApiError(0, 'NETWORK', 'Cannot reach the server. Check your connection.')
   }
+}
 
+/** Turns a non-OK response into ApiError (signing out on 401). */
+export async function raiseForStatus(response: Response): Promise<void> {
   if (response.status === 401) {
     await handleUnauthorized()
     throw new ApiError(401, 'UNAUTHENTICATED', 'Your session has expired. Sign in again.')
@@ -84,6 +88,30 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     }
     throw new ApiError(response.status, 'ERROR', 'Something went wrong.')
   }
+}
+
+/**
+ * Calls the FastAPI backend with the current Supabase access token. JSON bodies are
+ * serialised; FormData (file uploads) is sent as multipart.
+ */
+export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  const isForm = options.body instanceof FormData
+  if (options.body !== undefined && !isForm) headers['Content-Type'] = 'application/json'
+
+  const response = await apiFetch(path, {
+    method: options.method ?? 'GET',
+    headers,
+    query: options.query,
+    body:
+      options.body === undefined
+        ? undefined
+        : isForm
+          ? (options.body as FormData)
+          : JSON.stringify(options.body),
+    signal: options.signal,
+  })
+  await raiseForStatus(response)
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }

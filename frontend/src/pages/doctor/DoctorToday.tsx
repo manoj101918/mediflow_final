@@ -1,17 +1,21 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckIcon, Loader2Icon, PlayIcon, UserRoundIcon } from 'lucide-react'
-import { useCallback, type ReactNode } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckIcon, ClipboardListIcon, Loader2Icon, PlayIcon, UserRoundIcon } from 'lucide-react'
+import { useCallback, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { useAuth } from '@/auth/context'
 import { StatusBadge } from '@/components/appointments/Badges'
 import { useAppointmentMutation } from '@/components/appointments/useAppointmentMutation'
+import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useNow } from '@/hooks/useNow'
 import { type AppointmentChange, useRealtimeAppointments } from '@/hooks/useRealtimeAppointments'
+import { ApiError } from '@/lib/api'
 import { appointmentKeys, changeStatus, fetchDayAppointments } from '@/lib/appointments'
+import { completeVisit, fetchVisit } from '@/lib/records'
 import { clinicDate, formatPatientMeta, formatTime, formatWeekdayDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types/api'
@@ -48,14 +52,41 @@ export function DoctorTodayPage() {
     refetchInterval: 60_000,
   })
 
+  const navigate = useNavigate()
+  const chartPath = (a: Appointment) => `/doctor/patients/${a.patient.id}?appointment=${a.id}`
+
   const move = useAppointmentMutation(
     ({ id, to }: { id: string; to: AppointmentStatus }) => changeStatus(id, to),
-    (a) =>
-      a.status === 'completed'
-        ? `Finished with ${a.patient.full_name}`
-        : `Consultation started with ${a.patient.full_name}`,
+    (a) => `Consultation started with ${a.patient.full_name}`,
   )
-  const busyId = move.isPending ? move.variables?.id : undefined
+  const start = (a: Appointment) =>
+    move.mutate({ id: a.id, to: 'in_consultation' }, { onSuccess: () => navigate(chartPath(a)) })
+
+  // Completing finalizes the visit notes; warn first when none were written.
+  const [confirmEmpty, setConfirmEmpty] = useState<Appointment | null>(null)
+  const complete = useMutation({
+    mutationFn: (a: Appointment) => completeVisit(a.id),
+    onSuccess: (_, a) => {
+      setConfirmEmpty(null)
+      toast.success(`Finished with ${a.patient.full_name}`)
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Something went wrong.'),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: appointmentKeys.all }),
+  })
+  const requestComplete = async (a: Appointment) => {
+    try {
+      const visit = await fetchVisit(a.id)
+      if (visit.consultation) complete.mutate(a)
+      else setConfirmEmpty(a)
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Something went wrong.')
+    }
+  }
+  const busyId = move.isPending
+    ? move.variables?.id
+    : complete.isPending
+      ? complete.variables?.id
+      : undefined
 
   if (!me?.doctor_id) {
     return (
@@ -109,11 +140,17 @@ export function DoctorTodayPage() {
                 </p>
               ) : (
                 current.map((a) => (
-                  <PatientRow key={a.id} appointment={a} large>
+                  <PatientRow key={a.id} appointment={a} large chartPath={chartPath(a)}>
+                    <Button asChild size="lg" variant="outline">
+                      <Link to={chartPath(a)}>
+                        <ClipboardListIcon />
+                        Open chart
+                      </Link>
+                    </Button>
                     <Button
                       size="lg"
                       disabled={busyId === a.id}
-                      onClick={() => move.mutate({ id: a.id, to: 'completed' })}
+                      onClick={() => void requestComplete(a)}
                     >
                       {busyId === a.id ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
                       Complete
@@ -136,11 +173,11 @@ export function DoctorTodayPage() {
                 <ul className="divide-y">
                   {waiting.map((a, i) => (
                     <li key={a.id} className="py-2 first:pt-0 last:pb-0">
-                      <PatientRow appointment={a}>
+                      <PatientRow appointment={a} chartPath={chartPath(a)}>
                         <Button
                           variant={i === 0 ? 'default' : 'outline'}
                           disabled={busyId === a.id}
-                          onClick={() => move.mutate({ id: a.id, to: 'in_consultation' })}
+                          onClick={() => start(a)}
                         >
                           {busyId === a.id ? <Loader2Icon className="animate-spin" /> : <PlayIcon />}
                           {i === 0 ? 'Call next' : 'Start'}
@@ -196,6 +233,15 @@ export function DoctorTodayPage() {
           )}
         </>
       )}
+      <ConfirmDialog
+        open={confirmEmpty != null}
+        onOpenChange={(open) => !open && setConfirmEmpty(null)}
+        title="Complete without notes?"
+        description={`No consultation notes or prescription were recorded for ${confirmEmpty?.patient.full_name ?? 'this patient'}. Complete the visit anyway?`}
+        confirmLabel="Complete without notes"
+        pending={complete.isPending}
+        onConfirm={() => confirmEmpty && complete.mutate(confirmEmpty)}
+      />
     </div>
   )
 }
@@ -209,7 +255,18 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: str
   )
 }
 
-function PatientRow({ appointment: a, large, children }: { appointment: Appointment; large?: boolean; children: ReactNode }) {
+function PatientRow({
+  appointment: a,
+  large,
+  chartPath,
+  children,
+}: {
+  appointment: Appointment
+  large?: boolean
+  /** When set, the patient's name opens their chart. */
+  chartPath?: string
+  children: ReactNode
+}) {
   return (
     <div className="flex flex-wrap items-center gap-4" data-appointment-id={a.id} data-status={a.status}>
       <div
@@ -224,7 +281,13 @@ function PatientRow({ appointment: a, large, children }: { appointment: Appointm
       <div className="min-w-0 flex-1">
         <div className={cn('flex items-center gap-2 font-medium', large && 'text-lg')}>
           <UserRoundIcon className="size-4 text-muted-foreground" />
-          {a.patient.full_name}
+          {chartPath ? (
+            <Link to={chartPath} className="hover:underline" data-open-chart>
+              {a.patient.full_name}
+            </Link>
+          ) : (
+            a.patient.full_name
+          )}
           <span className="text-sm font-normal text-muted-foreground">
             {formatPatientMeta(a.patient.gender, a.patient.age)}
           </span>

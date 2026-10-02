@@ -66,7 +66,13 @@ export const router = createBrowserRouter([
         '/doctor',
         'doctor',
         () => import('@/components/layout/AppShell').then((m) => m.AppShell),
-        [{ index: true, lazy: lazyComponent(() => import('@/pages/doctor/DoctorToday').then((m) => m.DoctorTodayPage)) }],
+        [
+          { index: true, lazy: lazyComponent(() => import('@/pages/doctor/DoctorToday').then((m) => m.DoctorTodayPage)) },
+          {
+            path: 'patients/:patientId',
+            lazy: lazyComponent(() => import('@/pages/doctor/PatientChart').then((m) => m.PatientChartPage)),
+          },
+        ],
       ),
       area(
         '/admin',
