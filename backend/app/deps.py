@@ -2,6 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -16,6 +17,8 @@ from app.core.errors import AppError
 from app.core.security import InvalidTokenError, JWTVerifier, get_jwt_verifier
 from app.db.models import Clinic, Doctor, Profile, UserRole
 from app.db.session import get_session
+from app.services.booking.actor import StaffActor
+from app.services.booking.timeutil import clinic_tz, today_local
 
 DbSession = Annotated[AsyncSession, Depends(get_session)]
 
@@ -103,3 +106,17 @@ def require_role(*roles: UserRole) -> Callable[[CurrentUser], Awaitable[CurrentU
         return user
 
     return _guard
+
+
+FrontDeskUser = Annotated[CurrentUser, Depends(require_role(UserRole.RECEPTIONIST, UserRole.ADMIN))]
+AdminUser = Annotated[CurrentUser, Depends(require_role(UserRole.ADMIN))]
+
+
+def staff_actor(user: CurrentUser) -> StaffActor:
+    return StaffActor(
+        user_id=user.id, role=user.role, clinic_id=user.clinic_id, doctor_id=user.doctor_id
+    )
+
+
+def clinic_today(user: CurrentUser) -> date:
+    return today_local(clinic_tz(user.clinic_timezone))

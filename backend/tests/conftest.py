@@ -5,6 +5,7 @@ users) that is deleted on teardown, so seed data is never modified. API tests re
 JWT verifier: the bearer token is simply the auth user's id.
 """
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ from app.db.models import UserRole
 from app.db.session import build_engine, get_session
 from app.main import create_app
 from app.services.booking.actor import StaffActor, SystemActor, SystemChannel
+from app.services.users import EmailTakenError, get_auth_admin
 
 
 @pytest.fixture(scope="session")
@@ -47,7 +49,7 @@ class ClinicFixture:
     sessionmaker: async_sessionmaker[AsyncSession]
     auth_user_ids: list[UUID] = field(default_factory=list)
 
-    async def add_auth_user(self) -> UUID:
+    async def add_auth_user(self, email: str | None = None) -> UUID:
         user_id = uuid.uuid4()
         async with self.sessionmaker() as session, session.begin():
             await session.execute(
@@ -55,7 +57,7 @@ class ClinicFixture:
                     "insert into auth.users (id, email, aud, role) "
                     "values (:id, :email, 'authenticated', 'authenticated')"
                 ),
-                {"id": user_id, "email": f"pytest-{user_id.hex[:12]}@mediflow.test"},
+                {"id": user_id, "email": email or f"pytest-{user_id.hex[:12]}@mediflow.test"},
             )
         self.auth_user_ids.append(user_id)
         return user_id
@@ -123,6 +125,17 @@ class ClinicFixture:
                     "active": active,
                 },
             )
+        await self.add_schedule(doctor_id, windows=windows, weekdays=weekdays)
+        return doctor_id
+
+    async def add_schedule(
+        self,
+        doctor_id: UUID,
+        *,
+        windows: tuple[tuple[time, time], ...] = ((time(9), time(10)),),
+        weekdays: tuple[int, ...] = (0,),
+    ) -> None:
+        async with self.sessionmaker() as session, session.begin():
             for weekday in weekdays:
                 for start, end in windows:
                     await session.execute(
@@ -138,7 +151,6 @@ class ClinicFixture:
                             "end": end,
                         },
                     )
-        return doctor_id
 
     async def add_leave(self, doctor_id: UUID, day: date) -> None:
         async with self.sessionmaker() as session, session.begin():
@@ -224,6 +236,32 @@ def app(sessionmaker: async_sessionmaker[AsyncSession]) -> FastAPI:
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
+
+
+class FakeAuthAdmin:
+    """Stands in for the Supabase Admin API: creates real auth.users rows via the test DB."""
+
+    def __init__(self, clinic: ClinicFixture, loop: asyncio.AbstractEventLoop) -> None:
+        self._clinic = clinic
+        self._loop = loop
+        self.emails: set[str] = set()
+
+    def create_user(self, email: str, password: str) -> UUID:
+        if email in self.emails:
+            raise EmailTakenError(email)
+        self.emails.add(email)
+        future = asyncio.run_coroutine_threadsafe(self._clinic.add_auth_user(email), self._loop)
+        return future.result(timeout=30)
+
+    def delete_user(self, user_id: UUID) -> None:  # pragma: no cover - only on failures
+        pass
+
+
+@pytest.fixture
+async def auth_admin(app: FastAPI, clinic: ClinicFixture) -> FakeAuthAdmin:
+    fake = FakeAuthAdmin(clinic, asyncio.get_running_loop())
+    app.dependency_overrides[get_auth_admin] = lambda: fake
+    return fake
 
 
 def auth(user_id: UUID) -> dict[str, str]:
