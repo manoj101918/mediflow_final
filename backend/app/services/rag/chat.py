@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings
 from app.db.models import (
     ChatRole,
+    Patient,
     PatientChatMessage,
     PatientChatSession,
     RecordAccessAction,
@@ -157,8 +158,45 @@ async def prepare_turn(
         await session.rollback()
         return failure(BookingErrorCode.NOT_FOUND, "Conversation not found.")
     history = await _history(session, chat.id, settings.rag_max_history_turns)
+    context = await build_context(session, patient, question, history, providers, settings, today)
 
-    # Retrieval: standalone query (follow-ups), hybrid search, recent visits for time questions.
+    asked = PatientChatMessage(
+        clinic_id=actor.clinic_id, session_id=chat.id, role=ChatRole.USER, content=question
+    )
+    session.add(asked)
+    log_access(session, actor, patient.id, RecordAccessAction.CHAT_QUESTION, session_id=chat.id)
+    await session.flush()
+    prepared = PreparedTurn(chat.id, actor.clinic_id, asked.id, context.messages, context.sources)
+    await session.commit()
+    logger.info(
+        "chat_prepared",
+        session_id=str(chat.id),
+        sources=len(context.sources),
+        rewritten=context.rewritten,
+        recency=context.recency,
+    )
+    return success(prepared)
+
+
+@dataclass(frozen=True)
+class TurnContext:
+    messages: list[BaseMessage]
+    sources: list[Source]
+    rewritten: bool
+    recency: int | None
+
+
+async def build_context(
+    session: AsyncSession,
+    patient: Patient,
+    question: str,
+    history: list[tuple[str, str]],
+    providers: RagProviders,
+    settings: Settings,
+    today: date,
+) -> TurnContext:
+    """Retrieval + prompt for one question (no writes). Access must already be checked."""
+    # Standalone query for follow-ups, hybrid search, recent visits for time questions.
     query = await rewrite_question(providers.rewriter, history, question)
     retriever = PatientRecordRetriever(
         session=session,
@@ -177,24 +215,9 @@ async def prepare_turn(
 
     sources = [Source(1, "summary", patient.id, "Patient summary", today, summary)]
     sources += [_source(i, hit) for i, hit in enumerate(context, start=2)]
-    messages = build_messages(sources, history, question)
-
-    asked = PatientChatMessage(
-        clinic_id=actor.clinic_id, session_id=chat.id, role=ChatRole.USER, content=question
+    return TurnContext(
+        build_messages(sources, history, question), sources, query != question, window
     )
-    session.add(asked)
-    log_access(session, actor, patient.id, RecordAccessAction.CHAT_QUESTION, session_id=chat.id)
-    await session.flush()
-    prepared = PreparedTurn(chat.id, actor.clinic_id, asked.id, messages, sources)
-    await session.commit()
-    logger.info(
-        "chat_prepared",
-        session_id=str(chat.id),
-        sources=len(sources),
-        rewritten=query != question,
-        recency=window,
-    )
-    return success(prepared)
 
 
 def _friendly_error(exc: BaseException) -> tuple[str, str]:

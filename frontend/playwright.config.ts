@@ -37,6 +37,9 @@ export default defineConfig({
     {
       command: 'uv run python -m uvicorn app.main:app --port 8000',
       cwd: '../backend',
+      // The doctor-chart test needs deterministic answers without API keys. A server that is
+      // already running is reused as is, so start it with RAG_FAKE_LLM=true for E2E runs.
+      env: { RAG_FAKE_LLM: 'true' },
       url: 'http://localhost:8000/api/health',
       reuseExistingServer: true,
       timeout: 60_000,

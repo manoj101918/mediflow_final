@@ -57,6 +57,9 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+# Live evaluation calls the real LLM/embedding APIs: run explicitly with `-m live`.
+addopts = "-m 'not live'"
+markers = ["live: calls real model provider APIs (needs GROQ_API_KEY and VOYAGE_API_KEY)"]
 
 [dependency-groups]
 dev = [

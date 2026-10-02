@@ -52,10 +52,11 @@ interface AppointmentLite {
   reason_for_visit: string | null
 }
 
-/** Cancel (never delete) every still-scheduled appointment a test created, by its reason tag. */
+/** Cancel (never delete) every still-open appointment a test created, by its reason tag. */
 export async function cancelTagged(token: string, date: string, tag: string): Promise<number> {
   const page = await api<{ items: AppointmentLite[] }>(token, `/appointments?date=${date}&page_size=200`)
-  const mine = page.items.filter((a) => a.reason_for_visit === tag && a.status === 'scheduled')
+  const cancellable = ['scheduled', 'checked_in']
+  const mine = page.items.filter((a) => a.reason_for_visit === tag && cancellable.includes(a.status))
   for (const a of mine) {
     await api(token, `/appointments/${a.id}/status`, {
       method: 'POST',
