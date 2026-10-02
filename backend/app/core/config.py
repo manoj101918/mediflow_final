@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     # Postgres (Supabase session pooler). Must use the asyncpg driver: postgresql+asyncpg://...
     database_url: SecretStr
+    # Database used by pytest. Tests create throwaway clinics and never touch seed data.
+    test_database_url: SecretStr | None = None
 
     # Supabase project
     supabase_url: str
