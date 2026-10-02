@@ -13,6 +13,9 @@ HTTP_STATUS: dict[BookingErrorCode, int] = {
     BookingErrorCode.VALIDATION: 422,
     BookingErrorCode.NOT_FOUND: 404,
     BookingErrorCode.FORBIDDEN: 403,
+    BookingErrorCode.RECORD_LOCKED: 409,
+    BookingErrorCode.FILE_TOO_LARGE: 413,
+    BookingErrorCode.UNSUPPORTED_FILE_TYPE: 415,
 }
 
 

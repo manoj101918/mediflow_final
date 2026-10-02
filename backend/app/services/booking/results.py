@@ -14,6 +14,10 @@ class BookingErrorCode(enum.StrEnum):
     VALIDATION = "VALIDATION"
     NOT_FOUND = "NOT_FOUND"
     FORBIDDEN = "FORBIDDEN"
+    # Clinical records (Phase 2)
+    RECORD_LOCKED = "RECORD_LOCKED"
+    FILE_TOO_LARGE = "FILE_TOO_LARGE"
+    UNSUPPORTED_FILE_TYPE = "UNSUPPORTED_FILE_TYPE"
 
 
 @dataclass(frozen=True)

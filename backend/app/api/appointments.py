@@ -31,6 +31,7 @@ from app.services.booking import (
     update_appointment_status,
 )
 from app.services.patients import patient_age
+from app.services.records.consultations import complete_visit
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -173,11 +174,18 @@ async def create(
 async def change_status(
     appointment_id: UUID, body: StatusUpdate, session: DbSession, user: AuthUser
 ) -> AppointmentOut:
-    appointment = unwrap(
-        await update_appointment_status(
-            session, appointment_id, body.status, staff_actor(user), note=body.note
+    if body.status == AppointmentStatus.COMPLETED:
+        # Completing also finalizes the visit's draft consultation, in the same transaction.
+        done = unwrap(
+            await complete_visit(session, staff_actor(user), appointment_id, note=body.note)
         )
-    )
+        appointment = done.appointment
+    else:
+        appointment = unwrap(
+            await update_appointment_status(
+                session, appointment_id, body.status, staff_actor(user), note=body.note
+            )
+        )
     return to_out(await queries.get_appointment_row(session, user.clinic_id, appointment), user)
 
 

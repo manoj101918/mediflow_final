@@ -23,6 +23,10 @@ def _text(max_length: int) -> Any:
 # Optional free text: trimmed, blank becomes null.
 ShortText = _text(200)
 NoteText = _text(1000)
+# Clinical record fields.
+ItemText = _text(50)
+ShortClinicalText = _text(5000)
+ClinicalText = _text(10000)
 
 # Response timestamps are always UTC ("...Z"); clients convert to clinic time for display.
 UtcDateTime = Annotated[datetime, AfterValidator(lambda value: value.astimezone(UTC))]

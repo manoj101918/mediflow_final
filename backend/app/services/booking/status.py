@@ -45,7 +45,9 @@ async def update_appointment_status(
     require_current: AppointmentStatus | None = None,
 ) -> BookingResult[Appointment]:
     """Move an appointment to `target` if the transition and the actor allow it."""
-    result = await _transition(session, appointment_id, target, actor, note, require_current)
+    result = await transition_in_session(
+        session, appointment_id, target, actor, note=note, require_current=require_current
+    )
     if result.ok:
         await session.commit()
     else:
@@ -53,14 +55,20 @@ async def update_appointment_status(
     return result
 
 
-async def _transition(
+async def transition_in_session(
     session: AsyncSession,
     appointment_id: UUID,
     target: AppointmentStatus,
     actor: Actor,
-    note: str | None,
-    require_current: AppointmentStatus | None,
+    *,
+    note: str | None = None,
+    require_current: AppointmentStatus | None = None,
 ) -> BookingResult[Appointment]:
+    """Apply a transition and flush, without committing.
+
+    For callers that combine a status change with other writes in one transaction (e.g.
+    completing an appointment while finalizing its consultation); they commit or roll back.
+    """
     if not isinstance(actor, StaffActor):
         return failure(BookingErrorCode.FORBIDDEN, "Automated channels cannot change status.")
 

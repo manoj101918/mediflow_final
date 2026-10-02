@@ -252,3 +252,221 @@ export interface InboundRequest {
   appointment_id: string | null
   created_at: string
 }
+
+// --- Clinical records (doctor chart) -------------------------------------------------------
+// Mirrors backend/app/schemas/records.py and reports.py.
+
+export type ConsultationStatus = Enums['consultation_status']
+export type ReportType = Enums['report_type']
+export type IngestionStatus = Enums['ingestion_status']
+export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-'
+export type Timing = 'before_food' | 'after_food' | 'with_food' | 'empty_stomach' | 'bedtime' | 'any'
+
+export interface Vitals {
+  bp_systolic?: number | null
+  bp_diastolic?: number | null
+  pulse?: number | null
+  temperature_c?: number | null
+  weight_kg?: number | null
+  height_cm?: number | null
+  spo2?: number | null
+  blood_sugar?: number | null
+}
+
+export interface PrescriptionItemInput {
+  medicine_name: string
+  strength?: string | null
+  dosage_form?: string | null
+  dose?: string | null
+  route?: string | null
+  /** Indian style, e.g. 1-0-1, or SOS. */
+  frequency?: string | null
+  timing?: Timing | null
+  duration_days?: number | null
+  instructions?: string | null
+}
+
+export interface PrescriptionItem {
+  id: string
+  medicine_name: string
+  strength: string | null
+  dosage_form: string | null
+  dose: string | null
+  route: string | null
+  frequency: string | null
+  timing: string | null
+  duration_days: number | null
+  instructions: string | null
+  sort_order: number
+}
+
+/** Draft autosave body: only keys present change; `items` replaces the prescription. */
+export interface ConsultationInput {
+  chief_complaint?: string | null
+  history?: string | null
+  examination?: string | null
+  diagnosis?: string | null
+  advice?: string | null
+  follow_up_date?: string | null
+  notes?: string | null
+  vitals?: Vitals | null
+  items?: PrescriptionItemInput[] | null
+}
+
+export interface Consultation {
+  id: string
+  appointment_id: string
+  patient_id: string
+  doctor_id: string
+  chief_complaint: string | null
+  history: string | null
+  examination: string | null
+  diagnosis: string | null
+  advice: string | null
+  follow_up_date: string | null
+  notes: string | null
+  vitals: Vitals
+  status: ConsultationStatus
+  finalized_at: string | null
+  created_at: string
+  updated_at: string
+  items: PrescriptionItem[]
+}
+
+export interface Visit {
+  appointment_id: string
+  appointment_status: AppointmentStatus
+  doctor_id: string
+  /** True when the signed-in doctor may edit (own visit, checked in / in consultation, draft). */
+  editable: boolean
+  consultation: Consultation | null
+}
+
+export interface CompleteResult {
+  appointment_id: string
+  appointment_status: AppointmentStatus
+  consultation_id: string | null
+  finalized: boolean
+}
+
+export interface Addendum {
+  id: string
+  consultation_id: string
+  author_name: string
+  text: string
+  created_at: string
+}
+
+export interface MedicalProfile {
+  blood_group: string | null
+  allergies: string[]
+  chronic_conditions: string[]
+  updated_at: string | null
+}
+
+export interface MedicalProfileInput {
+  blood_group: BloodGroup | null
+  allergies: string[]
+  chronic_conditions: string[]
+}
+
+export interface ChartAppointment {
+  id: string
+  token_number: number
+  status: AppointmentStatus
+  starts_at: string
+  appointment_date: string
+  reason_for_visit: string | null
+  doctor_id: string
+  doctor_name: string
+}
+
+/** Chart header. No phone numbers (doctors never see them). */
+export interface Chart {
+  patient_id: string
+  full_name: string
+  gender: Gender | null
+  age: number | null
+  date_of_birth: string | null
+  profile: MedicalProfile
+  visit_count: number
+  last_visit: string | null
+  appointment: ChartAppointment | null
+}
+
+export interface ReportBrief {
+  id: string
+  title: string
+  report_type: ReportType
+  report_date: string | null
+  mime_type: string
+  ingestion_status: IngestionStatus
+}
+
+export interface HistoryVisit {
+  consultation_id: string
+  appointment_id: string
+  visit_date: string
+  token_number: number
+  doctor_id: string
+  doctor_name: string
+  doctor_specialization: string
+  chief_complaint: string | null
+  history: string | null
+  examination: string | null
+  diagnosis: string | null
+  advice: string | null
+  follow_up_date: string | null
+  notes: string | null
+  vitals: Vitals
+  finalized_at: string | null
+  items: PrescriptionItem[]
+  addenda: Addendum[]
+  reports: ReportBrief[]
+}
+
+export interface Medication {
+  item: PrescriptionItem
+  consultation_id: string
+  visit_date: string
+  doctor_name: string
+  /** Last day of the course, if a duration was given. */
+  end_date: string | null
+  current: boolean
+}
+
+export interface VitalsPoint {
+  consultation_id: string
+  visit_date: string
+  vitals: Vitals
+}
+
+export interface LatestPrescription {
+  consultation_id: string
+  visit_date: string
+  doctor_name: string
+  items: PrescriptionItem[]
+}
+
+/** Report metadata (reception, admin and doctors). */
+export interface Report {
+  id: string
+  patient_id: string
+  consultation_id: string | null
+  title: string
+  report_type: ReportType
+  report_date: string | null
+  mime_type: string
+  size_bytes: number
+  page_count: number | null
+  ingestion_status: IngestionStatus
+  ingestion_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReportUrl {
+  url: string
+  mime_type: string
+  expires_in: number
+}

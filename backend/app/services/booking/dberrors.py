@@ -6,6 +6,8 @@ from app.services.booking.results import BookingErrorCode
 
 EXCLUSION_VIOLATION = "23P01"
 UNIQUE_VIOLATION = "23505"
+# Raised by the finalized-consultation triggers (clinical_records migration).
+RECORD_LOCKED = "MF001"
 
 _UNIQUE_CONSTRAINT_CODES = {
     "appointments_external_ref_key": BookingErrorCode.ALREADY_EXISTS,
@@ -38,4 +40,6 @@ def booking_error_for(exc: DBAPIError) -> BookingErrorCode | None:
         return BookingErrorCode.SLOT_TAKEN
     if state == UNIQUE_VIOLATION:
         return _UNIQUE_CONSTRAINT_CODES.get(constraint_name(exc) or "")
+    if state == RECORD_LOCKED:
+        return BookingErrorCode.RECORD_LOCKED
     return None

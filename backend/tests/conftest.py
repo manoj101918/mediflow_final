@@ -8,8 +8,9 @@ JWT verifier: the bearer token is simply the auth user's id.
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import date, time
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 import pytest
@@ -24,6 +25,7 @@ from app.db.models import UserRole
 from app.db.session import build_engine, get_session
 from app.main import create_app
 from app.services.booking.actor import StaffActor, SystemActor, SystemChannel
+from app.services.records.storage import get_report_storage
 from app.services.users import EmailTakenError, get_auth_admin
 
 
@@ -48,6 +50,7 @@ class ClinicFixture:
     name: str
     sessionmaker: async_sessionmaker[AsyncSession]
     auth_user_ids: list[UUID] = field(default_factory=list)
+    _appointments: int = 0
 
     async def add_auth_user(self, email: str | None = None) -> UUID:
         user_id = uuid.uuid4()
@@ -174,6 +177,44 @@ class ClinicFixture:
             )
         return patient_id
 
+    async def add_appointment(
+        self,
+        doctor_id: UUID,
+        patient_id: UUID,
+        *,
+        status: str = "checked_in",
+        starts_at: datetime | None = None,
+        minutes: int = 15,
+    ) -> UUID:
+        """Insert an appointment directly (past dates and any status allowed).
+
+        Each call gets its own non-overlapping slot and token unless starts_at is given.
+        """
+        self._appointments += 1
+        seq = self._appointments
+        start = starts_at or datetime(2026, 1, 5, 4, 0, tzinfo=UTC) + timedelta(hours=seq)
+        appointment_id = uuid.uuid4()
+        async with self.sessionmaker() as session, session.begin():
+            await session.execute(
+                text(
+                    "insert into public.appointments (id, clinic_id, patient_id, doctor_id, "
+                    "starts_at, ends_at, status, source, token_number) values (:id, :cid, "
+                    ":pid, :did, :start, :end, cast(:status as public.appointment_status), "
+                    "'walk_in', :token)"
+                ),
+                {
+                    "id": appointment_id,
+                    "cid": self.id,
+                    "pid": patient_id,
+                    "did": doctor_id,
+                    "start": start,
+                    "end": start + timedelta(minutes=minutes),
+                    "status": status,
+                    "token": seq,
+                },
+            )
+        return appointment_id
+
     async def staff(self, role: UserRole = UserRole.RECEPTIONIST) -> StaffActor:
         """A real staff profile in this clinic, as a booking actor."""
         link = role == UserRole.DOCTOR
@@ -185,8 +226,8 @@ class ClinicFixture:
         return SystemActor(channel=channel, clinic_id=self.id)
 
 
-@pytest.fixture
-async def clinic(
+@asynccontextmanager
+async def _throwaway_clinic(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[ClinicFixture]:
     clinic_id = uuid.uuid4()
@@ -197,15 +238,36 @@ async def clinic(
             {"id": clinic_id, "name": name},
         )
     fixture = ClinicFixture(id=clinic_id, name=name, sessionmaker=sessionmaker)
-    yield fixture
-    async with sessionmaker() as session, session.begin():
-        # Clinic delete cascades to every clinic-scoped row; auth users are removed separately.
-        await session.execute(text("delete from public.clinics where id = :id"), {"id": clinic_id})
-        if fixture.auth_user_ids:
+    try:
+        yield fixture
+    finally:
+        async with sessionmaker() as session, session.begin():
+            # Clinic delete cascades to every clinic-scoped row; auth users go separately.
             await session.execute(
-                text("delete from auth.users where id = any(:ids)"),
-                {"ids": fixture.auth_user_ids},
+                text("delete from public.clinics where id = :id"), {"id": clinic_id}
             )
+            if fixture.auth_user_ids:
+                await session.execute(
+                    text("delete from auth.users where id = any(:ids)"),
+                    {"ids": fixture.auth_user_ids},
+                )
+
+
+@pytest.fixture
+async def clinic(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[ClinicFixture]:
+    async with _throwaway_clinic(sessionmaker) as fixture:
+        yield fixture
+
+
+@pytest.fixture
+async def other_clinic(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[ClinicFixture]:
+    """A second, unrelated clinic (cross-clinic isolation tests)."""
+    async with _throwaway_clinic(sessionmaker) as fixture:
+        yield fixture
 
 
 class FakeVerifier:
@@ -261,6 +323,34 @@ class FakeAuthAdmin:
 async def auth_admin(app: FastAPI, clinic: ClinicFixture) -> FakeAuthAdmin:
     fake = FakeAuthAdmin(clinic, asyncio.get_running_loop())
     app.dependency_overrides[get_auth_admin] = lambda: fake
+    return fake
+
+
+class FakeReportStorage:
+    """In-memory stand-in for the Supabase Storage bucket."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, tuple[bytes, str]] = {}
+
+    def upload(self, path: str, data: bytes, content_type: str) -> None:
+        if path in self.files:
+            raise RuntimeError("exists")
+        self.files[path] = (data, content_type)
+
+    def download(self, path: str) -> bytes:
+        return self.files[path][0]
+
+    def signed_url(self, path: str, expires_in: int) -> str:
+        return f"https://storage.test/{path}?expires_in={expires_in}"
+
+    def remove(self, path: str) -> None:
+        self.files.pop(path, None)
+
+
+@pytest.fixture
+def report_storage(app: FastAPI) -> FakeReportStorage:
+    fake = FakeReportStorage()
+    app.dependency_overrides[get_report_storage] = lambda: fake
     return fake
 
 
