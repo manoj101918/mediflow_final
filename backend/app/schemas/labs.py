@@ -5,8 +5,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
-from app.db.models import LabCategory, LabRangeSex, LabSampleType, LabValueType
-from app.schemas.common import Name, ShortText, UtcDateTime
+from app.db.models import (
+    Gender,
+    LabCategory,
+    LabFlag,
+    LabItemStatus,
+    LabOrderStatus,
+    LabPriority,
+    LabRangeSex,
+    LabSampleType,
+    LabValueType,
+)
+from app.schemas.common import Name, NoteText, ShortText, UtcDateTime
 
 TestCode = Annotated[
     str,
@@ -140,3 +150,263 @@ class ClinicSettingsOut(BaseModel):
 
 class ClinicSettingsUpdate(BaseModel):
     lab_requires_verification: bool
+
+
+# ---------------------------------------------------------------------------
+# Orders, samples and results
+# ---------------------------------------------------------------------------
+
+
+class LabOrderCreate(BaseModel):
+    test_ids: list[UUID] = Field(min_length=1, max_length=30)
+    priority: LabPriority = LabPriority.ROUTINE
+    clinical_note: NoteText = None
+
+
+class LabCancel(BaseModel):
+    # None cancels every test that is still waiting for collection.
+    item_ids: list[UUID] | None = Field(default=None, max_length=30)
+    reason: ShortText = None
+
+
+class LabCollect(BaseModel):
+    item_ids: list[UUID] = Field(min_length=1, max_length=30)
+
+
+class LabReason(BaseModel):
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+class LabComment(BaseModel):
+    comment: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class LabValueIn(BaseModel):
+    parameter_id: UUID
+    # A number for numeric parameters, the text/choice otherwise; null clears a draft value.
+    value: float | Annotated[str, StringConstraints(max_length=500)] | None
+
+
+class LabResultsIn(BaseModel):
+    values: list[LabValueIn] = Field(min_length=1, max_length=60)
+    confirm_critical: bool = False
+
+
+class LabAmendIn(BaseModel):
+    values: list[LabValueIn] = Field(min_length=1, max_length=60)
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class LabAcknowledge(BaseModel):
+    note: NoteText = None
+
+
+class LabResultOut(BaseModel):
+    id: UUID
+    parameter_id: UUID
+    parameter_code: str
+    parameter_name: str
+    unit: str | None
+    value_type: LabValueType
+    value_numeric: float | None
+    value_text: str | None
+    range_label: str | None
+    ref_low: float | None
+    ref_high: float | None
+    flag: LabFlag | None
+    version: int
+    is_current: bool
+    amended_reason: str | None
+    entered_at: UtcDateTime
+
+
+class LabSampleOut(BaseModel):
+    id: UUID
+    sample_code: str
+    sample_type: LabSampleType
+    container: str | None
+    collected_at: UtcDateTime
+    rejected_at: UtcDateTime | None
+    rejected_reason: str | None
+
+
+class LabItemOut(BaseModel):
+    id: UUID
+    test_id: UUID
+    test_code: str
+    test_name: str
+    status: LabItemStatus
+    sample_id: UUID | None
+    sample_code: str | None
+    rejection_reason: str | None
+    return_comment: str | None
+    entered_at: UtcDateTime | None
+    verified_at: UtcDateTime | None
+    released_at: UtcDateTime | None
+    cancelled_reason: str | None
+    results: list[LabResultOut]
+    # Earlier versions of amended results.
+    history: list[LabResultOut]
+
+
+class LabOrderOut(BaseModel):
+    id: UUID
+    order_number: str
+    patient_id: UUID
+    patient_name: str
+    appointment_id: UUID
+    consultation_id: UUID | None
+    ordering_doctor_id: UUID
+    ordering_doctor_name: str
+    priority: LabPriority
+    status: LabOrderStatus
+    clinical_note: str | None
+    cancelled_reason: str | None
+    reviewed_at: UtcDateTime | None
+    report_id: UUID | None
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
+    items: list[LabItemOut]
+    samples: list[LabSampleOut]
+
+
+class LabTestStatusOut(BaseModel):
+    test_name: str
+    status: LabItemStatus
+
+
+class LabOrderStatusOut(BaseModel):
+    """Front desk view of an order: no clinical note, no values."""
+
+    id: UUID
+    order_number: str
+    appointment_id: UUID
+    ordering_doctor_name: str
+    priority: LabPriority
+    status: LabOrderStatus
+    created_at: UtcDateTime
+    tests: list[LabTestStatusOut]
+
+
+class LabStatusCountsOut(BaseModel):
+    appointment_id: UUID
+    pending: int
+    ready: int
+
+
+class LabPatientOut(BaseModel):
+    id: UUID
+    full_name: str
+    phone: str
+    gender: Gender | None
+    age: int | None
+
+
+class LabRangeOut(BaseModel):
+    low: float | None
+    high: float | None
+    critical_low: float | None
+    critical_high: float | None
+    text_normal: str | None
+    label: str | None
+
+
+class LabPreviousOut(BaseModel):
+    value_numeric: float | None
+    value_text: str | None
+    unit: str | None
+    flag: LabFlag | None
+    released_at: UtcDateTime
+    order_number: str
+
+
+class LabParameterEntryOut(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    unit: str | None
+    value_type: LabValueType
+    choices: list[str]
+    decimals: int
+    delta_percent: float | None
+    range: LabRangeOut | None
+    previous: LabPreviousOut | None
+    delta_warning: bool
+
+
+class LabItemDetailOut(LabItemOut):
+    category: LabCategory
+    sample_type: LabSampleType
+    container: str | None
+    parameters: list[LabParameterEntryOut]
+
+
+class LabOrderDetailOut(BaseModel):
+    order: LabOrderOut
+    patient: LabPatientOut
+    requires_verification: bool
+    items: list[LabItemDetailOut]
+
+
+class LabWorklistRowOut(BaseModel):
+    order_id: UUID
+    order_number: str
+    priority: LabPriority
+    status: LabOrderStatus
+    created_at: UtcDateTime
+    patient_id: UUID
+    patient_name: str
+    patient_phone: str
+    patient_gender: Gender | None
+    patient_age: int | None
+    ordering_doctor_name: str
+    counts: dict[LabItemStatus, int]
+    tests: list[str]
+    sample_codes: list[str]
+
+
+class LabTrendPointOut(BaseModel):
+    value: float
+    flag: LabFlag | None
+    ref_low: float | None
+    ref_high: float | None
+    released_at: UtcDateTime
+    order_id: UUID
+    order_item_id: UUID
+    order_number: str
+
+
+class LabTrendOut(BaseModel):
+    code: str
+    name: str
+    unit: str | None
+    points: list[LabTrendPointOut]
+
+
+class LabInboxRowOut(BaseModel):
+    order: LabOrderOut
+    abnormal: int
+    critical: int
+
+
+class LabAlertOut(BaseModel):
+    id: UUID
+    patient_id: UUID
+    patient_name: str
+    order_id: UUID
+    order_number: str
+    parameter_name: str
+    value: str
+    unit: str | None
+    flag: LabFlag | None
+    range_label: str | None
+    created_at: UtcDateTime
+
+
+class LabReviewedOut(BaseModel):
+    order_id: UUID
+    reviewed_at: UtcDateTime
+
+
+class LabRepeatOut(BaseModel):
+    test_ids: list[UUID]

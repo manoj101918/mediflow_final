@@ -1,7 +1,8 @@
 """Structured patient summary from SQL (not vector search): always source [1].
 
 Name, age, sex, allergies, chronic conditions, current medications (courses not yet over),
-last visit and today's date in IST, so "current", "allergies" and "since last visit"
+last visit, latest abnormal lab values, unacknowledged critical lab results and today's date
+in IST, so "current", "allergies" and "since last visit"
 questions work even when retrieval finds nothing.
 """
 
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Patient
 from app.services.ingestion.render import describe_item, human_date
+from app.services.labs.render import lab_summary_lines
 from app.services.patients import patient_age
 from app.services.records import read
 from app.services.records.profile import get_profile
@@ -70,4 +72,5 @@ async def patient_summary(session: AsyncSession, patient: Patient, today: date) 
             f"Last visit: {human_date(last.visit_date)} with {last.doctor_name} "
             f"({last.doctor_specialization}): {summary}."
         )
+    lines.extend(await lab_summary_lines(session, patient.id, today))
     return "\n".join(lines)

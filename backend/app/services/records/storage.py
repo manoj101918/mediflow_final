@@ -25,7 +25,9 @@ def report_path(clinic_id: UUID, patient_id: UUID, report_id: UUID, mime_type: s
 class ReportStorage(Protocol):
     """Blocking storage operations (run them with anyio.to_thread)."""
 
-    def upload(self, path: str, data: bytes, content_type: str) -> None: ...
+    def upload(
+        self, path: str, data: bytes, content_type: str, *, upsert: bool = False
+    ) -> None: ...
 
     def download(self, path: str) -> bytes: ...
 
@@ -38,8 +40,11 @@ class SupabaseReportStorage:
     def __init__(self, client: Client) -> None:
         self._bucket = client.storage.from_(BUCKET)
 
-    def upload(self, path: str, data: bytes, content_type: str) -> None:
-        self._bucket.upload(path, data, {"content-type": content_type, "upsert": "false"})
+    def upload(self, path: str, data: bytes, content_type: str, *, upsert: bool = False) -> None:
+        # upsert: regenerated files (lab report PDFs) replace the previous version.
+        self._bucket.upload(
+            path, data, {"content-type": content_type, "upsert": "true" if upsert else "false"}
+        )
 
     def download(self, path: str) -> bytes:
         return self._bucket.download(path)

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     Consultation,
     IngestionStatus,
+    LabOrder,
     PatientReport,
     RecordAccessAction,
     RecordSourceType,
@@ -52,6 +53,9 @@ class NewReport:
     report_date: date | None
     data: bytes
     consultation_id: UUID | None = None
+    # The lab's own (machine) PDF for an order: uploaded by lab staff, stored with the order's
+    # report and never embedded (the order's structured results are).
+    lab_order_id: UUID | None = None
 
 
 async def upload_report(
@@ -63,9 +67,14 @@ async def upload_report(
     *,
     max_bytes: int,
 ) -> BookingResult[PatientReport]:
-    allowed = await report_patient(session, actor, patient_id)
-    if not allowed.ok:
-        return failure(allowed.code or BookingErrorCode.FORBIDDEN, allowed.message)
+    if report.lab_order_id is not None:
+        allowed_order = await _lab_attachment_check(session, actor, patient_id, report.lab_order_id)
+        if not allowed_order.ok:
+            return failure(allowed_order.code or BookingErrorCode.FORBIDDEN, allowed_order.message)
+    else:
+        allowed = await report_patient(session, actor, patient_id)
+        if not allowed.ok:
+            return failure(allowed.code or BookingErrorCode.FORBIDDEN, allowed.message)
     title = " ".join(report.title.split())
     if not title or len(title) > 200:
         return failure(
@@ -108,10 +117,21 @@ async def upload_report(
             storage_path=path,
             mime_type=mime_type,
             size_bytes=len(report.data),
+            lab_order_id=report.lab_order_id,
         )
         session.add(row)
         await session.flush()
-        await enqueue(session, actor.clinic_id, patient_id, RecordSourceType.REPORT, report_id)
+        if report.lab_order_id is None:
+            await enqueue(session, actor.clinic_id, patient_id, RecordSourceType.REPORT, report_id)
+        else:
+            # Searchable through the order's results; the lab_result job marks it indexed.
+            await enqueue(
+                session,
+                actor.clinic_id,
+                patient_id,
+                RecordSourceType.LAB_RESULT,
+                report.lab_order_id,
+            )
         log_access(
             session, actor, patient_id, RecordAccessAction.REPORT_UPLOAD, report_id=report_id
         )
@@ -121,6 +141,23 @@ async def upload_report(
         await to_thread.run_sync(storage.remove, path)
         raise
     return success(row)
+
+
+async def _lab_attachment_check(
+    session: AsyncSession, actor: StaffActor, patient_id: UUID, order_id: UUID
+) -> BookingResult[UUID]:
+    if not actor.is_lab:
+        return failure(BookingErrorCode.FORBIDDEN, "Only lab staff can attach lab PDFs.")
+    found = await session.scalar(
+        select(LabOrder.id).where(
+            LabOrder.id == order_id,
+            LabOrder.clinic_id == actor.clinic_id,
+            LabOrder.patient_id == patient_id,
+        )
+    )
+    if found is None:
+        return failure(BookingErrorCode.NOT_FOUND, "Lab order not found.")
+    return success(found)
 
 
 async def list_reports(

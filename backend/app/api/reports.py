@@ -48,7 +48,7 @@ def report_out(report: PatientReport) -> ReportOut:
     )
 
 
-async def _read_limited(file: UploadFile, max_bytes: int) -> bytes | None:
+async def read_limited(file: UploadFile, max_bytes: int) -> bytes | None:
     """The file's bytes, or None as soon as it exceeds max_bytes (never buffers more)."""
     data = bytearray()
     while chunk := await file.read(_READ_CHUNK):
@@ -72,7 +72,7 @@ async def upload(
 ) -> ReportOut:
     """Upload a PDF/JPEG/PNG (type checked from its bytes). Indexing runs in the background."""
     max_bytes = get_settings().report_max_mb * 1024 * 1024
-    data = await _read_limited(file, max_bytes)
+    data = await read_limited(file, max_bytes)
     if data is None:
         raise AppError(
             HTTP_STATUS[BookingErrorCode.FILE_TOO_LARGE],

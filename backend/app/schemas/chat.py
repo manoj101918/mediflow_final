@@ -17,11 +17,13 @@ class Citation(BaseModel):
     """What an [n] marker in an answer points at."""
 
     n: int
-    source_type: Literal["summary", "profile", "consultation", "report"]
+    source_type: Literal["summary", "profile", "consultation", "report", "lab_result"]
+    # lab_result: the lab order; item_id is the cited test of that order.
     source_id: UUID
     label: str
     date: str | None
     page: int | None
+    item_id: UUID | None = None
 
 
 class ChatSessionOut(BaseModel):

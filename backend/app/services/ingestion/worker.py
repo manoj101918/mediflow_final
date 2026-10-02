@@ -22,6 +22,7 @@ from uuid import UUID
 import structlog
 from anyio import to_thread
 from langchain_core.embeddings import Embeddings
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
@@ -37,6 +38,8 @@ from app.services.ingestion.chunking import chunk_report_pages, chunk_source
 from app.services.ingestion.extract import ExtractionError, extract_pdf, looks_scanned
 from app.services.ingestion.indexer import IndexResult, index_source, remove_source
 from app.services.ingestion.render import render_consultation, render_profile
+from app.services.labs.pdf import build_report_data, render_report
+from app.services.labs.render import render_lab_order
 from app.services.rag.providers import (
     ProviderNotConfiguredError,
     embedding_model_name,
@@ -196,10 +199,63 @@ async def _index_report(
     return result
 
 
+async def _index_lab_result(
+    session: AsyncSession, deps: IngestionDeps, job: jobs.ClaimedJob
+) -> IndexResult | None:
+    """A lab order's released results (source_id = lab_orders.id).
+
+    Indexes one chunk per released test, then renders the clinic's PDF report, uploads it
+    (replacing an earlier version) and marks the order's reports as indexed. The PDF's text is
+    never embedded: the structured results already are.
+    """
+    source = await render_lab_order(session, job.source_id)
+    if source is None:
+        await remove_source(session, RecordSourceType.LAB_RESULT, job.source_id)
+        await session.commit()
+        return None
+    s = deps.settings
+    result = await index_source(
+        session,
+        deps.embeddings,
+        deps.model,
+        clinic_id=source.clinic_id,
+        patient_id=source.patient_id,
+        source_type=RecordSourceType.LAB_RESULT,
+        source_id=job.source_id,
+        source_date=source.source_date,
+        chunks=chunk_source(source, s.rag_chunk_size, s.rag_chunk_overlap),
+    )
+    data = await build_report_data(session, job.source_id)
+    report = await session.scalar(
+        select(PatientReport).where(
+            PatientReport.lab_order_id == job.source_id, PatientReport.is_generated
+        )
+    )
+    if data is not None and report is not None:
+        rendered = render_report(data)
+        await to_thread.run_sync(
+            lambda: deps.storage.upload(
+                report.storage_path, rendered.data, "application/pdf", upsert=True
+            )
+        )
+        report.size_bytes = len(rendered.data)
+        report.page_count = rendered.pages
+        if data.amended and not report.title.endswith("(amended)"):
+            report.title = f"{report.title} (amended)"
+    await session.execute(
+        update(PatientReport)
+        .where(PatientReport.lab_order_id == job.source_id)
+        .values(ingestion_status=IngestionStatus.INDEXED, ingestion_error=None)
+    )
+    await session.commit()
+    return result
+
+
 _HANDLERS = {
     RecordSourceType.CONSULTATION: _index_consultation,
     RecordSourceType.PROFILE: _index_profile,
     RecordSourceType.REPORT: _index_report,
+    RecordSourceType.LAB_RESULT: _index_lab_result,
 }
 
 

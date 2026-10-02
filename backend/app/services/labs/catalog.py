@@ -80,7 +80,7 @@ class CatalogTest:
     parameters: list[CatalogParameter] = field(default_factory=list)
 
 
-def _decimal(value: float | None) -> Decimal | None:
+def decimal_or_none(value: float | None) -> Decimal | None:
     return None if value is None else Decimal(str(value))
 
 
@@ -90,10 +90,10 @@ def _range_row(parameter_id: UUID, spec: RangeSpec) -> LabReferenceRange:
         sex=spec.sex,
         age_min_years=spec.age_min_years,
         age_max_years=spec.age_max_years,
-        low=_decimal(spec.low),
-        high=_decimal(spec.high),
-        critical_low=_decimal(spec.critical_low),
-        critical_high=_decimal(spec.critical_high),
+        low=decimal_or_none(spec.low),
+        high=decimal_or_none(spec.high),
+        critical_low=decimal_or_none(spec.critical_low),
+        critical_high=decimal_or_none(spec.critical_high),
         text_normal=spec.text_normal,
     )
 
@@ -179,7 +179,7 @@ async def _write_parameters(
             "value_type": spec.value_type,
             "choices": list(spec.choices),
             "decimals": spec.decimals,
-            "delta_percent": _decimal(spec.delta_percent),
+            "delta_percent": decimal_or_none(spec.delta_percent),
             "is_active": spec.is_active,
             "sort_order": order,
         }

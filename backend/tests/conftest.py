@@ -358,8 +358,8 @@ class FakeReportStorage:
     def __init__(self) -> None:
         self.files: dict[str, tuple[bytes, str]] = {}
 
-    def upload(self, path: str, data: bytes, content_type: str) -> None:
-        if path in self.files:
+    def upload(self, path: str, data: bytes, content_type: str, *, upsert: bool = False) -> None:
+        if path in self.files and not upsert:
             raise RuntimeError("exists")
         self.files[path] = (data, content_type)
 

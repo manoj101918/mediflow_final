@@ -107,15 +107,21 @@ async def _history(session: AsyncSession, session_id: UUID, turns: int) -> list[
 
 def _source(n: int, hit: ChunkHit) -> Source:
     label = str(hit.metadata.get("label") or hit.source_type.title())
+    extra: dict[str, Any] = {}
+    if hit.source_type == "lab_result":
+        # One chunk per released test of an order: cite the order and that test.
+        label = f"Lab {hit.metadata.get('test_code', '')} {hit.metadata.get('order_number', '')}"
+        extra["item_id"] = hit.metadata.get("order_item_id")
     page = hit.metadata.get("page")
     return Source(
         n=n,
         source_type=hit.source_type,
         source_id=hit.source_id,
-        label=label,
+        label=" ".join(label.split()),
         source_date=hit.source_date,
         content=hit.content,
         page=int(page) if isinstance(page, int) else None,
+        extra=extra,
     )
 
 
@@ -210,6 +216,7 @@ async def build_context(
     window = recency_window(question)
     if window is not None:
         ranked += await retriever.recent("consultation", window)
+        ranked += await retriever.recent("lab_result", window)
     summary = await patient_summary(session, patient, today)
     context = _select_context(ranked, MAX_CONTEXT_CHARS - len(summary))
 

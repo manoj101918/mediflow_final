@@ -5,14 +5,22 @@ the clinic must review every range and critical limit before use (see README). U
 `scripts.seed_lab` for the seed clinic and by the test fixtures.
 """
 
-from dataclasses import replace
+import uuid
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import LabCategory, LabRangeSex, LabSampleType, LabTest, LabValueType
-from app.services.labs.catalog import LabTestSpec, ParameterSpec, RangeSpec, create_test
+from app.db.models import (
+    LabCategory,
+    LabRangeSex,
+    LabReferenceRange,
+    LabSampleType,
+    LabTest,
+    LabTestParameter,
+    LabValueType,
+)
+from app.services.labs.catalog import LabTestSpec, ParameterSpec, RangeSpec, decimal_or_none
 
 M, F = LabRangeSex.MALE, LabRangeSex.FEMALE
 HAEM, BIO, HORM = LabCategory.HAEMATOLOGY, LabCategory.BIOCHEMISTRY, LabCategory.HORMONES
@@ -313,16 +321,69 @@ CATALOG: tuple[LabTestSpec, ...] = (
 
 
 async def install_catalog(session: AsyncSession, clinic_id: UUID) -> int:
-    """Add the starter tests the clinic doesn't have yet (matched by code). Commits per test."""
+    """Add the starter tests the clinic doesn't have yet (matched by code). Commits once.
+
+    Bulk inserts (three statements) rather than the admin path, so seeding a clinic is cheap
+    (tests create a catalog per throwaway clinic).
+    """
     existing = set(
         (await session.scalars(select(LabTest.code).where(LabTest.clinic_id == clinic_id))).all()
     )
-    added = 0
+    tests: list[dict[str, object]] = []
+    params: list[dict[str, object]] = []
+    ranges: list[dict[str, object]] = []
     for order, spec in enumerate(CATALOG):
         if spec.code in existing:
             continue
-        result = await create_test(session, clinic_id, replace(spec, sort_order=order * 10))
-        if not result.ok:
-            raise RuntimeError(f"catalog seed failed for {spec.code}: {result.message}")
-        added += 1
-    return added
+        test_id = uuid.uuid4()
+        tests.append(
+            {
+                "id": test_id,
+                "clinic_id": clinic_id,
+                "code": spec.code,
+                "name": spec.name,
+                "category": spec.category,
+                "sample_type": spec.sample_type,
+                "container": spec.container,
+                "turnaround_hours": spec.turnaround_hours,
+                "is_panel": spec.is_panel,
+                "sort_order": order * 10,
+            }
+        )
+        for position, p in enumerate(spec.parameters):
+            param_id = uuid.uuid4()
+            params.append(
+                {
+                    "id": param_id,
+                    "test_id": test_id,
+                    "code": p.code,
+                    "name": p.name,
+                    "unit": p.unit or None,
+                    "value_type": p.value_type,
+                    "choices": list(p.choices),
+                    "decimals": p.decimals,
+                    "delta_percent": decimal_or_none(p.delta_percent),
+                    "sort_order": position,
+                }
+            )
+            ranges.extend(
+                {
+                    "parameter_id": param_id,
+                    "sex": r.sex,
+                    "age_min_years": r.age_min_years,
+                    "age_max_years": r.age_max_years,
+                    "low": decimal_or_none(r.low),
+                    "high": decimal_or_none(r.high),
+                    "critical_low": decimal_or_none(r.critical_low),
+                    "critical_high": decimal_or_none(r.critical_high),
+                    "text_normal": r.text_normal,
+                }
+                for r in p.ranges
+            )
+    if tests:
+        await session.execute(insert(LabTest), tests)
+        await session.execute(insert(LabTestParameter), params)
+        if ranges:
+            await session.execute(insert(LabReferenceRange), ranges)
+        await session.commit()
+    return len(tests)

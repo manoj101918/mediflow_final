@@ -53,7 +53,7 @@ class Source:
     """One numbered source in the prompt; also what a citation points at."""
 
     n: int
-    source_type: str  # "summary" | "profile" | "consultation" | "report"
+    source_type: str  # "summary" | "profile" | "consultation" | "report" | "lab_result"
     source_id: UUID
     label: str
     source_date: date | None
@@ -69,6 +69,7 @@ class Source:
             "label": self.label,
             "date": self.source_date.isoformat() if self.source_date else None,
             "page": self.page,
+            "item_id": self.extra.get("item_id"),
         }
 
 
