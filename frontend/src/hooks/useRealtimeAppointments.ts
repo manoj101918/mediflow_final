@@ -8,27 +8,34 @@ import { patientKeys } from '@/lib/patients'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database'
 
-type AppointmentRow = Database['public']['Tables']['appointments']['Row']
+export type AppointmentRow = Database['public']['Tables']['appointments']['Row']
 export type AppointmentChange = RealtimePostgresChangesPayload<AppointmentRow>
+
+interface RealtimeOptions {
+  /** A booking created by someone other than the current user. */
+  onInsertByOthers?: (row: AppointmentRow) => void
+  /** Every change (insert / update / delete) the user is allowed to see. */
+  onChange?: (change: AppointmentChange) => void
+}
 
 /**
  * Live updates for the clinic's appointments via Supabase Realtime.
  *
  * Rows arrive only if RLS lets this user see them (doctors: their own). Every change refetches
- * appointment queries; `onInsertByOthers` fires for bookings made by someone else.
+ * appointment and patient queries, then the optional callbacks run.
  */
-export function useRealtimeAppointments(onInsertByOthers?: (row: AppointmentRow) => void) {
+export function useRealtimeAppointments(options: RealtimeOptions = {}) {
   const { me, session } = useAuth()
   const queryClient = useQueryClient()
   const token = session?.access_token
   const clinicId = me?.clinic.id
   const userId = me?.id
 
-  // Keep the latest callback without resubscribing on every render.
-  const callbackRef = useRef(onInsertByOthers)
+  // Keep the latest callbacks without resubscribing on every render.
+  const optionsRef = useRef(options)
   useEffect(() => {
-    callbackRef.current = onInsertByOthers
-  }, [onInsertByOthers])
+    optionsRef.current = options
+  }, [options])
 
   useEffect(() => {
     if (!token || !clinicId) return
@@ -52,8 +59,10 @@ export function useRealtimeAppointments(onInsertByOthers?: (row: AppointmentRow)
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.all })
             // Patient pages show visit history.
             void queryClient.invalidateQueries({ queryKey: patientKeys.all })
+            const { onInsertByOthers, onChange } = optionsRef.current
+            onChange?.(payload)
             if (payload.eventType === 'INSERT' && payload.new.created_by !== userId) {
-              callbackRef.current?.(payload.new)
+              onInsertByOthers?.(payload.new)
             }
           },
         )

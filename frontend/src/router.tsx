@@ -2,9 +2,13 @@ import { Navigate, createBrowserRouter } from 'react-router'
 
 import { RequireRole, RootRedirect } from '@/auth/RequireRole'
 import { AppShell } from '@/components/layout/AppShell'
-import { ComingSoon } from '@/components/layout/ComingSoon'
+import { AdminLayout } from '@/components/layout/AdminLayout'
 import { ReceptionLayout } from '@/components/layout/ReceptionLayout'
 import { LoginPage } from '@/pages/Login'
+import { DoctorManagePage } from '@/pages/admin/DoctorManage'
+import { AdminDoctorsPage } from '@/pages/admin/Doctors'
+import { UsersPage } from '@/pages/admin/Users'
+import { DoctorTodayPage } from '@/pages/doctor/DoctorToday'
 import { AppointmentsPage } from '@/pages/reception/Appointments'
 import { DoctorsPage } from '@/pages/reception/Doctors'
 import { PatientDetailPage } from '@/pages/reception/PatientDetail'
@@ -37,17 +41,21 @@ export const router = createBrowserRouter([
       </RequireRole>
     ),
     children: [
-      { index: true, element: <ComingSoon title="My appointments today" milestone="Milestone 7" /> },
+      { index: true, element: <DoctorTodayPage /> },
     ],
   },
   {
     path: '/admin',
     element: (
       <RequireRole roles={['admin']}>
-        <AppShell />
+        <AdminLayout />
       </RequireRole>
     ),
-    children: [{ index: true, element: <ComingSoon title="Staff & doctors" milestone="Milestone 7" /> }],
+    children: [
+      { index: true, element: <UsersPage /> },
+      { path: 'doctors', element: <AdminDoctorsPage /> },
+      { path: 'doctors/:doctorId', element: <DoctorManagePage /> },
+    ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
 ])

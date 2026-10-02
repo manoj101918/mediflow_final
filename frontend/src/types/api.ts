@@ -191,3 +191,43 @@ export interface Duplicate {
   patient: Patient
   reason: DuplicateReason
 }
+
+// --- Admin ----------------------------------------------------------------------------------
+
+export interface StaffUser {
+  id: string
+  email: string | null
+  full_name: string
+  phone: string | null
+  role: UserRole
+  is_active: boolean
+  /** Linked doctor record (doctor accounts only). */
+  doctor_id: string | null
+  created_at: string
+}
+
+export interface StaffUserCreate {
+  email: string
+  password: string
+  full_name: string
+  phone: string | null
+  role: UserRole
+  doctor_id: string | null
+}
+
+export interface DoctorInput {
+  full_name: string
+  specialization: string
+  consultation_fee: number
+  default_slot_minutes: number
+}
+
+export interface ShiftInput {
+  weekday: number
+  start_time: string
+  end_time: string
+}
+
+export interface LeaveCreated extends Leave {
+  affected_appointments: number
+}
