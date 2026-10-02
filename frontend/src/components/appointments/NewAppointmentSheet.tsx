@@ -57,11 +57,19 @@ interface NewAppointmentSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   prefillPatient?: SelectedPatient
+  /** Text to search patients for (e.g. a bot caller's phone number). */
+  prefillSearch?: string
   /** Changes every time the sheet opens, so each booking starts fresh. */
   session: number
 }
 
-export function NewAppointmentSheet({ open, onOpenChange, prefillPatient, session }: NewAppointmentSheetProps) {
+export function NewAppointmentSheet({
+  open,
+  onOpenChange,
+  prefillPatient,
+  prefillSearch,
+  session,
+}: NewAppointmentSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-xl">
@@ -69,13 +77,26 @@ export function NewAppointmentSheet({ open, onOpenChange, prefillPatient, sessio
           <SheetTitle>New appointment</SheetTitle>
           <SheetDescription>Find or add the patient, pick a slot, confirm.</SheetDescription>
         </SheetHeader>
-        <BookingFlow key={session} prefillPatient={prefillPatient} onDone={() => onOpenChange(false)} />
+        <BookingFlow
+          key={session}
+          prefillPatient={prefillPatient}
+          prefillSearch={prefillSearch}
+          onDone={() => onOpenChange(false)}
+        />
       </SheetContent>
     </Sheet>
   )
 }
 
-function BookingFlow({ prefillPatient, onDone }: { prefillPatient?: SelectedPatient; onDone: () => void }) {
+function BookingFlow({
+  prefillPatient,
+  prefillSearch,
+  onDone,
+}: {
+  prefillPatient?: SelectedPatient
+  prefillSearch?: string
+  onDone: () => void
+}) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<Step>(prefillPatient ? 'slot' : 'patient')
   const [patient, setPatient] = useState<SelectedPatient | null>(prefillPatient ?? null)
@@ -176,7 +197,7 @@ function BookingFlow({ prefillPatient, onDone }: { prefillPatient?: SelectedPati
           </div>
         )}
 
-        {step === 'patient' && <PatientStep onChoose={choosePatient} />}
+        {step === 'patient' && <PatientStep initialSearch={prefillSearch} onChoose={choosePatient} />}
 
         {step === 'slot' && (
           <div className="space-y-4">
@@ -295,9 +316,15 @@ function BookingFlow({ prefillPatient, onDone }: { prefillPatient?: SelectedPati
   )
 }
 
-function PatientStep({ onChoose }: { onChoose: (p: SelectedPatient) => void }) {
+function PatientStep({
+  initialSearch = '',
+  onChoose,
+}: {
+  initialSearch?: string
+  onChoose: (p: SelectedPatient) => void
+}) {
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch)
   const [adding, setAdding] = useState(false)
   const q = useDebouncedValue(search.trim(), 250)
 

@@ -231,3 +231,24 @@ export interface ShiftInput {
 export interface LeaveCreated extends Leave {
   affected_appointments: number
 }
+
+// --- Inbound (bot) requests -------------------------------------------------------------------
+
+export type InboundStatus = Enums['inbound_status']
+export type InboundChannel = Enums['inbound_channel']
+
+export interface InboundRequest {
+  id: string
+  channel: InboundChannel
+  external_ref: string | null
+  caller_phone: string | null
+  parsed_patient_name: string | null
+  requested_doctor_id: string | null
+  requested_doctor_name: string | null
+  requested_time: string | null
+  status: InboundStatus
+  /** "CODE: message" explaining why it was not booked automatically. */
+  error: string | null
+  appointment_id: string | null
+  created_at: string
+}

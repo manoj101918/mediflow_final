@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { NewAppointmentSheet } from '@/components/appointments/NewAppointmentSheet'
 import {
   NewAppointmentContext,
-  type SelectedPatient,
+  type NewAppointmentPrefill,
 } from '@/components/appointments/newAppointmentContext'
 import { type NavItem, SidebarShell } from '@/components/layout/SidebarShell'
 import { useHotkeys } from '@/hooks/useHotkeys'
@@ -43,14 +43,14 @@ export function ReceptionLayout() {
   )
   useRealtimeAppointments({ onInsertByOthers: announce })
 
-  const [booking, setBooking] = useState<{ open: boolean; session: number; patient?: SelectedPatient }>({
+  const [booking, setBooking] = useState<{ open: boolean; session: number; prefill?: NewAppointmentPrefill }>({
     open: false,
     session: 0,
   })
   const newAppointment = useMemo(
     () => ({
-      openNewAppointment: (prefill?: { patient?: SelectedPatient }) =>
-        setBooking((b) => ({ open: true, session: b.session + 1, patient: prefill?.patient })),
+      openNewAppointment: (prefill?: NewAppointmentPrefill) =>
+        setBooking((b) => ({ open: true, session: b.session + 1, prefill })),
     }),
     [],
   )
@@ -62,7 +62,8 @@ export function ReceptionLayout() {
         <NewAppointmentSheet
           open={booking.open}
           session={booking.session}
-          prefillPatient={booking.patient}
+          prefillPatient={booking.prefill?.patient}
+          prefillSearch={booking.prefill?.search}
           onOpenChange={(open) => setBooking((b) => ({ ...b, open }))}
         />
       </SidebarShell>

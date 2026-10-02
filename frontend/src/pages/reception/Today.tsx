@@ -3,6 +3,7 @@ import { PalmtreeIcon, PlusIcon, SearchIcon } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 
 import { AppointmentTable } from '@/components/appointments/AppointmentTable'
+import { InboundReview } from '@/components/appointments/InboundReview'
 import { useNewAppointment } from '@/components/appointments/newAppointmentContext'
 import { PendingConfirmation } from '@/components/appointments/PendingConfirmation'
 import { SummaryCards } from '@/components/appointments/SummaryCards'
@@ -111,6 +112,7 @@ export function TodayPage() {
       </div>
 
       <SummaryCards appointments={dayQuery.isPending ? undefined : forDoctor} />
+      <InboundReview />
       <PendingConfirmation today={today} />
 
       <div className="space-y-3">
