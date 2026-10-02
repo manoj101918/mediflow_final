@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app.db.models import EMBEDDING_DIM
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -35,6 +37,45 @@ class Settings(BaseSettings):
     inbound_api_key: SecretStr
     inbound_clinic_id: UUID | None = None
     inbound_rate_limit: str = "30/minute"
+
+    # Patient-record chatbot (RAG). Keys stay server-side; they never reach the frontend.
+    groq_api_key: SecretStr | None = None
+    voyage_api_key: SecretStr | None = None
+    llm_model: str = "openai/gpt-oss-120b"
+    llm_reasoning_effort: str = "low"
+    llm_max_tokens: int = Field(default=1024, ge=64, le=8192)
+    llm_timeout_seconds: float = 60.0
+    embedding_model: str = "voyage-4"
+    # Must equal the vector(n) column in patient_record_chunks (checked below).
+    embedding_dim: int = EMBEDDING_DIM
+    rag_top_k: int = Field(default=6, ge=1, le=30)
+    rag_chunk_size: int = Field(default=1000, ge=200, le=8000)
+    rag_chunk_overlap: int = Field(default=150, ge=0, le=2000)
+    rag_max_history_turns: int = Field(default=4, ge=0, le=20)
+    # Fake chat model + fake embeddings: tests and E2E run without API keys.
+    rag_fake_llm: bool = False
+    chat_rate_limit: str = "6/minute"
+
+    # Report uploads. The Storage bucket's file_size_limit must match REPORT_MAX_MB.
+    report_max_mb: int = Field(default=10, ge=1, le=50)
+    # PDFs averaging fewer extracted characters per page are treated as scanned (no_text).
+    min_text_chars_per_page: int = Field(default=50, ge=0)
+    signed_url_ttl_seconds: int = Field(default=60, ge=10, le=3600)
+
+    # Ingestion worker (asyncio task started in the FastAPI lifespan).
+    ingestion_worker_enabled: bool = True
+    ingestion_max_attempts: int = Field(default=5, ge=1, le=20)
+    ingestion_poll_seconds: float = Field(default=2.0, gt=0)
+
+    @field_validator("embedding_dim")
+    @classmethod
+    def _match_vector_column(cls, value: int) -> int:
+        if value != EMBEDDING_DIM:
+            raise ValueError(
+                f"EMBEDDING_DIM={value} does not match the database column "
+                f"vector({EMBEDDING_DIM}); add a migration before changing it"
+            )
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod

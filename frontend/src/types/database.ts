@@ -191,6 +191,157 @@ export type Database = {
         }
         Relationships: []
       }
+      consultation_addenda: {
+        Row: {
+          author_id: string | null
+          author_name: string
+          clinic_id: string
+          consultation_id: string
+          created_at: string
+          id: string
+          text: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name: string
+          clinic_id: string
+          consultation_id: string
+          created_at?: string
+          id?: string
+          text: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string
+          clinic_id?: string
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_addenda_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_addenda_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultation_addenda_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultations: {
+        Row: {
+          advice: string | null
+          appointment_id: string
+          chief_complaint: string | null
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          diagnosis: string | null
+          doctor_id: string
+          examination: string | null
+          finalized_at: string | null
+          follow_up_date: string | null
+          history: string | null
+          id: string
+          notes: string | null
+          patient_id: string
+          status: Database["public"]["Enums"]["consultation_status"]
+          updated_at: string
+          vitals: Json
+        }
+        Insert: {
+          advice?: string | null
+          appointment_id: string
+          chief_complaint?: string | null
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          diagnosis?: string | null
+          doctor_id: string
+          examination?: string | null
+          finalized_at?: string | null
+          follow_up_date?: string | null
+          history?: string | null
+          id?: string
+          notes?: string | null
+          patient_id: string
+          status?: Database["public"]["Enums"]["consultation_status"]
+          updated_at?: string
+          vitals?: Json
+        }
+        Update: {
+          advice?: string | null
+          appointment_id?: string
+          chief_complaint?: string | null
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          diagnosis?: string | null
+          doctor_id?: string
+          examination?: string | null
+          finalized_at?: string | null
+          follow_up_date?: string | null
+          history?: string | null
+          id?: string
+          notes?: string | null
+          patient_id?: string
+          status?: Database["public"]["Enums"]["consultation_status"]
+          updated_at?: string
+          vitals?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultations_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultations_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultations_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       doctor_leaves: {
         Row: {
           clinic_id: string
@@ -399,6 +550,483 @@ export type Database = {
           },
         ]
       }
+      ingestion_jobs: {
+        Row: {
+          attempts: number
+          clinic_id: string
+          created_at: string
+          id: string
+          last_error: string | null
+          patient_id: string
+          run_after: string
+          source_id: string
+          source_type: Database["public"]["Enums"]["record_source_type"]
+          status: Database["public"]["Enums"]["job_status"]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          clinic_id: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          patient_id: string
+          run_after?: string
+          source_id: string
+          source_type: Database["public"]["Enums"]["record_source_type"]
+          status?: Database["public"]["Enums"]["job_status"]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          patient_id?: string
+          run_after?: string
+          source_id?: string
+          source_type?: Database["public"]["Enums"]["record_source_type"]
+          status?: Database["public"]["Enums"]["job_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingestion_jobs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingestion_jobs_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_chat_messages: {
+        Row: {
+          citations: Json
+          clinic_id: string
+          content: string
+          created_at: string
+          error_code: string | null
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string | null
+          output_tokens: number | null
+          role: Database["public"]["Enums"]["chat_role"]
+          session_id: string
+        }
+        Insert: {
+          citations?: Json
+          clinic_id: string
+          content: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          role: Database["public"]["Enums"]["chat_role"]
+          session_id: string
+        }
+        Update: {
+          citations?: Json
+          clinic_id?: string
+          content?: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          role?: Database["public"]["Enums"]["chat_role"]
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_chat_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "patient_chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_chat_sessions: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          doctor_id: string | null
+          id: string
+          patient_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          doctor_id?: string | null
+          id?: string
+          patient_id: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          doctor_id?: string | null
+          id?: string
+          patient_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_chat_sessions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_chat_sessions_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_chat_sessions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_chat_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_medical_profiles: {
+        Row: {
+          allergies: string[]
+          blood_group: string | null
+          chronic_conditions: string[]
+          clinic_id: string
+          created_at: string
+          patient_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allergies?: string[]
+          blood_group?: string | null
+          chronic_conditions?: string[]
+          clinic_id: string
+          created_at?: string
+          patient_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allergies?: string[]
+          blood_group?: string | null
+          chronic_conditions?: string[]
+          clinic_id?: string
+          created_at?: string
+          patient_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_medical_profiles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_medical_profiles_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: true
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_medical_profiles_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_record_access_log: {
+        Row: {
+          action: Database["public"]["Enums"]["record_access_action"]
+          appointment_id: string | null
+          clinic_id: string
+          created_at: string
+          id: number
+          patient_id: string
+          report_id: string | null
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["record_access_action"]
+          appointment_id?: string | null
+          clinic_id: string
+          created_at?: string
+          id?: never
+          patient_id: string
+          report_id?: string | null
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["record_access_action"]
+          appointment_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          id?: never
+          patient_id?: string
+          report_id?: string | null
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_record_access_log_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_record_access_log_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_record_access_log_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_record_access_log_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "patient_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_record_access_log_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "patient_chat_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_record_access_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_record_chunks: {
+        Row: {
+          chunk_index: number
+          clinic_id: string
+          content: string
+          content_hash: string
+          content_tsv: unknown
+          created_at: string
+          embedding: string
+          embedding_model: string
+          id: string
+          metadata: Json
+          patient_id: string
+          source_date: string | null
+          source_id: string
+          source_type: Database["public"]["Enums"]["record_source_type"]
+        }
+        Insert: {
+          chunk_index: number
+          clinic_id: string
+          content: string
+          content_hash: string
+          content_tsv?: unknown
+          created_at?: string
+          embedding: string
+          embedding_model: string
+          id?: string
+          metadata?: Json
+          patient_id: string
+          source_date?: string | null
+          source_id: string
+          source_type: Database["public"]["Enums"]["record_source_type"]
+        }
+        Update: {
+          chunk_index?: number
+          clinic_id?: string
+          content?: string
+          content_hash?: string
+          content_tsv?: unknown
+          created_at?: string
+          embedding?: string
+          embedding_model?: string
+          id?: string
+          metadata?: Json
+          patient_id?: string
+          source_date?: string | null
+          source_id?: string
+          source_type?: Database["public"]["Enums"]["record_source_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_record_chunks_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_record_chunks_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_reports: {
+        Row: {
+          clinic_id: string
+          consultation_id: string | null
+          created_at: string
+          extracted_text: string | null
+          extraction_method:
+            | Database["public"]["Enums"]["extraction_method"]
+            | null
+          id: string
+          ingestion_error: string | null
+          ingestion_status: Database["public"]["Enums"]["ingestion_status"]
+          mime_type: string
+          page_count: number | null
+          patient_id: string
+          report_date: string | null
+          report_type: Database["public"]["Enums"]["report_type"]
+          size_bytes: number
+          storage_path: string
+          title: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          clinic_id: string
+          consultation_id?: string | null
+          created_at?: string
+          extracted_text?: string | null
+          extraction_method?:
+            | Database["public"]["Enums"]["extraction_method"]
+            | null
+          id?: string
+          ingestion_error?: string | null
+          ingestion_status?: Database["public"]["Enums"]["ingestion_status"]
+          mime_type: string
+          page_count?: number | null
+          patient_id: string
+          report_date?: string | null
+          report_type: Database["public"]["Enums"]["report_type"]
+          size_bytes: number
+          storage_path: string
+          title: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          consultation_id?: string | null
+          created_at?: string
+          extracted_text?: string | null
+          extraction_method?:
+            | Database["public"]["Enums"]["extraction_method"]
+            | null
+          id?: string
+          ingestion_error?: string | null
+          ingestion_status?: Database["public"]["Enums"]["ingestion_status"]
+          mime_type?: string
+          page_count?: number | null
+          patient_id?: string
+          report_date?: string | null
+          report_type?: Database["public"]["Enums"]["report_type"]
+          size_bytes?: number
+          storage_path?: string
+          title?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_reports_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_reports_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_reports_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_reports_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           address: string | null
@@ -462,6 +1090,111 @@ export type Database = {
           },
         ]
       }
+      prescription_items: {
+        Row: {
+          created_at: string
+          dosage_form: string | null
+          dose: string | null
+          duration_days: number | null
+          frequency: string | null
+          id: string
+          instructions: string | null
+          medicine_name: string
+          prescription_id: string
+          route: string | null
+          sort_order: number
+          strength: string | null
+          timing: string | null
+        }
+        Insert: {
+          created_at?: string
+          dosage_form?: string | null
+          dose?: string | null
+          duration_days?: number | null
+          frequency?: string | null
+          id?: string
+          instructions?: string | null
+          medicine_name: string
+          prescription_id: string
+          route?: string | null
+          sort_order?: number
+          strength?: string | null
+          timing?: string | null
+        }
+        Update: {
+          created_at?: string
+          dosage_form?: string | null
+          dose?: string | null
+          duration_days?: number | null
+          frequency?: string | null
+          id?: string
+          instructions?: string | null
+          medicine_name?: string
+          prescription_id?: string
+          route?: string | null
+          sort_order?: number
+          strength?: string | null
+          timing?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescription_items_prescription_id_fkey"
+            columns: ["prescription_id"]
+            isOneToOne: false
+            referencedRelation: "prescriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prescriptions: {
+        Row: {
+          clinic_id: string
+          consultation_id: string
+          created_at: string
+          id: string
+          patient_id: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          consultation_id: string
+          created_at?: string
+          id?: string
+          patient_id: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          patient_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: true
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           clinic_id: string
@@ -518,9 +1251,32 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      chat_role: "user" | "assistant"
+      consultation_status: "draft" | "finalized"
+      extraction_method: "text"
       gender: "male" | "female" | "other"
       inbound_channel: "whatsapp" | "voice"
       inbound_status: "received" | "auto_booked" | "needs_review" | "rejected"
+      ingestion_status:
+        | "pending"
+        | "processing"
+        | "indexed"
+        | "failed"
+        | "no_text"
+      job_status: "pending" | "processing" | "done" | "failed"
+      record_access_action:
+        | "chart_open"
+        | "chat_question"
+        | "report_view"
+        | "report_upload"
+      record_source_type: "profile" | "consultation" | "report"
+      report_type:
+        | "lab"
+        | "imaging"
+        | "discharge_summary"
+        | "referral"
+        | "old_prescription"
+        | "other"
       user_role: "admin" | "receptionist" | "doctor"
     }
     CompositeTypes: {
@@ -660,9 +1416,35 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      chat_role: ["user", "assistant"],
+      consultation_status: ["draft", "finalized"],
+      extraction_method: ["text"],
       gender: ["male", "female", "other"],
       inbound_channel: ["whatsapp", "voice"],
       inbound_status: ["received", "auto_booked", "needs_review", "rejected"],
+      ingestion_status: [
+        "pending",
+        "processing",
+        "indexed",
+        "failed",
+        "no_text",
+      ],
+      job_status: ["pending", "processing", "done", "failed"],
+      record_access_action: [
+        "chart_open",
+        "chat_question",
+        "report_view",
+        "report_upload",
+      ],
+      record_source_type: ["profile", "consultation", "report"],
+      report_type: [
+        "lab",
+        "imaging",
+        "discharge_summary",
+        "referral",
+        "old_prescription",
+        "other",
+      ],
       user_role: ["admin", "receptionist", "doctor"],
     },
   },
