@@ -3,7 +3,9 @@ import { Navigate, createBrowserRouter } from 'react-router'
 import { RequireRole, RootRedirect } from '@/auth/RequireRole'
 import { AppShell } from '@/components/layout/AppShell'
 import { ComingSoon } from '@/components/layout/ComingSoon'
+import { ReceptionLayout } from '@/components/layout/ReceptionLayout'
 import { LoginPage } from '@/pages/Login'
+import { TodayPage } from '@/pages/reception/Today'
 
 export const router = createBrowserRouter([
   { path: '/', element: <RootRedirect /> },
@@ -12,10 +14,15 @@ export const router = createBrowserRouter([
     path: '/reception',
     element: (
       <RequireRole roles={['receptionist']}>
-        <AppShell />
+        <ReceptionLayout />
       </RequireRole>
     ),
-    children: [{ index: true, element: <ComingSoon title="Today" milestone="Milestone 5" /> }],
+    children: [
+      { index: true, element: <TodayPage /> },
+      { path: 'appointments', element: <ComingSoon title="Appointments" milestone="Milestone 6" /> },
+      { path: 'patients', element: <ComingSoon title="Patients" milestone="Milestone 6" /> },
+      { path: 'doctors', element: <ComingSoon title="Doctors" milestone="Milestone 6" /> },
+    ],
   },
   {
     path: '/doctor',
