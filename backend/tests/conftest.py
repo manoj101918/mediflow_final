@@ -6,11 +6,13 @@ JWT verifier: the bearer token is simply the auth user's id.
 """
 
 import asyncio
+import json
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -21,13 +23,17 @@ from langchain_core.embeddings.fake import DeterministicFakeEmbedding
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.api.chat import rag_providers
 from app.core.config import get_settings
+from app.core.rate_limit import reset_chat_limits
 from app.core.security import InvalidTokenError, TokenClaims, get_jwt_verifier
 from app.db.models import EMBEDDING_DIM, UserRole
 from app.db.session import build_engine, get_session
+from app.deps import get_session_factory
 from app.main import create_app
 from app.services.booking.actor import StaffActor, SystemActor, SystemChannel
 from app.services.ingestion.worker import IngestionDeps, run_pending
+from app.services.rag.providers import FakeRecordsChatModel, RagProviders
 from app.services.records.storage import get_report_storage
 from app.services.users import EmailTakenError, get_auth_admin
 
@@ -407,6 +413,36 @@ class Ingestion:
 
     async def run(self) -> int:
         return await run_pending(self.clinic.sessionmaker, self.deps, clinic_id=self.clinic.id)
+
+
+@pytest.fixture
+def rag(
+    app: FastAPI,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    ingestion: "Ingestion",
+) -> RagProviders:
+    """Fake chat model + the ingestion test embeddings, wired into the chat endpoint."""
+    providers = RagProviders(
+        chat=FakeRecordsChatModel(),
+        rewriter=FakeRecordsChatModel(),
+        embeddings=ingestion.deps.embeddings,
+        embedding_model=TEST_EMBEDDING_MODEL,
+        chat_model="pytest-fake-chat",
+    )
+    app.dependency_overrides[rag_providers] = lambda: providers
+    app.dependency_overrides[get_session_factory] = lambda: sessionmaker
+    reset_chat_limits()
+    return providers
+
+
+def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
+    """[(event, data), ...] from a text/event-stream body."""
+    events: list[tuple[str, dict[str, Any]]] = []
+    for block in body.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
+        if "event" in lines:
+            events.append((lines["event"], json.loads(lines.get("data", "{}"))))
+    return events
 
 
 def auth(user_id: UUID) -> dict[str, str]:

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, appointments, doctors, inbound, me, patients, records, reports
+from app.api import admin, appointments, chat, doctors, inbound, me, patients, records, reports
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import add_request_logging, configure_logging
@@ -56,7 +56,7 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    for module in (me, appointments, patients, doctors, admin, inbound, records, reports):
+    for module in (me, appointments, patients, doctors, admin, inbound, records, reports, chat):
         app.include_router(module.router, prefix="/api")
     return app
 

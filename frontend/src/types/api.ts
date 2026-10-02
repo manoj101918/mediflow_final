@@ -470,3 +470,42 @@ export interface ReportUrl {
   mime_type: string
   expires_in: number
 }
+
+// --- Patient chat (assistant) ---------------------------------------------------------------
+// Mirrors backend/app/schemas/chat.py.
+
+export type CitationSourceType = 'summary' | 'profile' | 'consultation' | 'report'
+
+/** What an [n] marker in an answer points at. */
+export interface Citation {
+  n: number
+  source_type: CitationSourceType
+  source_id: string
+  label: string
+  /** YYYY-MM-DD */
+  date: string | null
+  page: number | null
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  citations: Citation[]
+  error_code: string | null
+  created_at: string
+}
+
+/** Server-Sent Events from POST /patients/{id}/chat. */
+export type ChatStreamEvent =
+  | { event: 'token'; data: { text: string } }
+  | { event: 'citations'; data: { citations: Citation[] } }
+  | { event: 'done'; data: { session_id: string; message_id: string } }
+  | { event: 'error'; data: { code: string; message: string; session_id: string; message_id: string } }

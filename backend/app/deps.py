@@ -11,16 +11,24 @@ from fastapi import Depends, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.errors import AppError
 from app.core.security import InvalidTokenError, JWTVerifier, get_jwt_verifier
 from app.db.models import Clinic, Doctor, Profile, UserRole
-from app.db.session import get_session
+from app.db.session import get_session, get_sessionmaker
 from app.services.booking.actor import StaffActor
 from app.services.booking.timeutil import clinic_tz, today_local
 
 DbSession = Annotated[AsyncSession, Depends(get_session)]
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """For work that outlives the request handler (e.g. writing after a streamed response)."""
+    return get_sessionmaker()
+
+
+SessionFactory = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 
 logger = structlog.get_logger(__name__)
 

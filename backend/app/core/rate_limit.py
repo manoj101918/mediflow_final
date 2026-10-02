@@ -1,7 +1,12 @@
 """Request rate limiting (in-memory; one API process). Used for the public inbound endpoint."""
 
+from uuid import UUID
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from limits import parse
+from limits.storage import MemoryStorage
+from limits.strategies import MovingWindowRateLimiter
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -27,6 +32,20 @@ async def _rate_limited(_: Request, exc: Exception) -> JSONResponse:
         "Too many requests. Slow down and retry later.",
         headers={"Retry-After": retry_after},
     )
+
+
+# Patient chat: per signed-in user (not per IP), moving window, limit read per request.
+_chat_storage = MemoryStorage()
+_chat_limiter = MovingWindowRateLimiter(_chat_storage)
+
+
+def allow_chat(user_id: UUID) -> bool:
+    """Count one chat question for this user; False when over CHAT_RATE_LIMIT."""
+    return _chat_limiter.hit(parse(get_settings().chat_rate_limit), "chat", str(user_id))
+
+
+def reset_chat_limits() -> None:
+    _chat_storage.reset()
 
 
 def register_rate_limiting(app: FastAPI) -> None:
