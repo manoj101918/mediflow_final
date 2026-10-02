@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { ChartHeader } from '@/components/chart/ChartHeader'
+import { ChatPanel } from '@/components/chat/ChatPanel'
 import { CurrentVisit } from '@/components/chart/CurrentVisit'
 import { MedicationsTab } from '@/components/chart/MedicationsTab'
 import { type OpenReport, ReportViewer } from '@/components/chart/ReportViewer'
@@ -16,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApiError } from '@/lib/api'
 import { fetchChart, recordKeys } from '@/lib/records'
+import type { Citation } from '@/types/api'
 
 type Tab = 'current' | 'history' | 'medications' | 'reports' | 'vitals'
 
@@ -32,8 +34,9 @@ export function PatientChartPage() {
   const reports = useReports(patientId)
 
   const [tab, setTab] = useState<Tab>(appointmentId ? 'current' : 'history')
-  const [focusVisit] = useState<string | null>(null)
+  const [focusVisit, setFocusVisit] = useState<{ id: string; token: number } | null>(null)
   const [viewing, setViewing] = useState<OpenReport | null>(null)
+  const header = useRef<HTMLDivElement>(null)
 
   const openReport = useCallback(
     (reportId: string, page?: number | null) => {
@@ -41,6 +44,21 @@ export function PatientChartPage() {
       setViewing({ id: reportId, page, title })
     },
     [reports.data],
+  )
+
+  /** A citation chip opens what it cites: the visit, the report at its page, or the summary. */
+  const openCitation = useCallback(
+    (citation: Citation) => {
+      if (citation.source_type === 'consultation') {
+        setTab('history')
+        setFocusVisit({ id: citation.source_id, token: Date.now() })
+      } else if (citation.source_type === 'report') {
+        openReport(citation.source_id, citation.page)
+      } else {
+        header.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    },
+    [openReport],
   )
 
   if (chart.isPending) {
@@ -66,40 +84,47 @@ export function PatientChartPage() {
   const hasVisit = Boolean(appointmentId && chart.data.appointment)
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link to="/doctor">
-          <ArrowLeftIcon />
-          Today&apos;s queue
-        </Link>
-      </Button>
-      <ChartHeader chart={chart.data} />
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-        <TabsList className="flex-wrap">
-          {hasVisit && <TabsTrigger value="current">Current visit</TabsTrigger>}
-          <TabsTrigger value="history">Visit history</TabsTrigger>
-          <TabsTrigger value="medications">Medications</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="vitals">Vitals trend</TabsTrigger>
-        </TabsList>
-        {hasVisit && appointmentId && (
-          <TabsContent value="current" forceMount hidden={tab !== 'current'}>
-            <CurrentVisit patientId={patientId} appointmentId={appointmentId} />
+    <div className="mx-auto grid max-w-[1600px] gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
+      <div className="min-w-0 space-y-4">
+        <Button asChild variant="ghost" size="sm" className="-ml-2">
+          <Link to="/doctor">
+            <ArrowLeftIcon />
+            Today&apos;s queue
+          </Link>
+        </Button>
+        <div ref={header} className="scroll-mt-4">
+          <ChartHeader chart={chart.data} />
+        </div>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <TabsList className="flex-wrap">
+            {hasVisit && <TabsTrigger value="current">Current visit</TabsTrigger>}
+            <TabsTrigger value="history">Visit history</TabsTrigger>
+            <TabsTrigger value="medications">Medications</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="vitals">Vitals trend</TabsTrigger>
+          </TabsList>
+          {hasVisit && appointmentId && (
+            <TabsContent value="current" forceMount hidden={tab !== 'current'}>
+              <CurrentVisit patientId={patientId} appointmentId={appointmentId} />
+            </TabsContent>
+          )}
+          <TabsContent value="history">
+            <VisitHistory patientId={patientId} focus={focusVisit} onOpenReport={(id) => openReport(id)} />
           </TabsContent>
-        )}
-        <TabsContent value="history">
-          <VisitHistory patientId={patientId} focusConsultationId={focusVisit} onOpenReport={(id) => openReport(id)} />
-        </TabsContent>
-        <TabsContent value="medications">
-          <MedicationsTab patientId={patientId} />
-        </TabsContent>
-        <TabsContent value="reports">
-          <ReportsTab patientId={patientId} canView onOpenReport={(id) => openReport(id)} />
-        </TabsContent>
-        <TabsContent value="vitals">
-          <VitalsTrend patientId={patientId} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="medications">
+            <MedicationsTab patientId={patientId} />
+          </TabsContent>
+          <TabsContent value="reports">
+            <ReportsTab patientId={patientId} canView onOpenReport={(id) => openReport(id)} />
+          </TabsContent>
+          <TabsContent value="vitals">
+            <VitalsTrend patientId={patientId} />
+          </TabsContent>
+        </Tabs>
+      </div>
+      <aside className="xl:sticky xl:top-4 xl:self-start">
+        <ChatPanel patientId={patientId} onCite={openCitation} />
+      </aside>
       <ReportViewer report={viewing} onClose={() => setViewing(null)} />
     </div>
   )

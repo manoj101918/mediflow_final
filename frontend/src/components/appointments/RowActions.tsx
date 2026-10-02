@@ -1,6 +1,7 @@
 import {
   CalendarClockIcon,
   CheckIcon,
+  FileUpIcon,
   Loader2Icon,
   LogInIcon,
   MoreHorizontalIcon,
@@ -11,6 +12,7 @@ import {
 import { useState } from 'react'
 
 import { ReasonDialog } from '@/components/appointments/ReasonDialog'
+import { ReportUploadDialog } from '@/components/chart/ReportUploadDialog'
 import { RescheduleDialog } from '@/components/appointments/RescheduleDialog'
 import { useAppointmentMutation, who } from '@/components/appointments/useAppointmentMutation'
 import { Button } from '@/components/ui/button'
@@ -47,7 +49,7 @@ const PRIMARY: Partial<Record<AppointmentStatus, { to: AppointmentStatus; label:
 
 const PRIMARY_ICON = { checked_in: LogInIcon, in_consultation: PlayIcon, completed: CheckIcon }
 
-type DialogKind = 'cancel' | 'reject' | 'reschedule' | null
+type DialogKind = 'cancel' | 'reject' | 'reschedule' | 'upload' | null
 
 export function RowActions({ appointment }: { appointment: Appointment }) {
   const [dialog, setDialog] = useState<DialogKind>(null)
@@ -74,11 +76,6 @@ export function RowActions({ appointment }: { appointment: Appointment }) {
   const canReschedule = RESCHEDULABLE.includes(status)
   const canNoShow = allowed.includes('no_show')
   const canCancel = allowed.includes('cancelled') && !pending
-  const hasMenu = canReschedule || canNoShow || canCancel || pending
-
-  if (!primary && !pending && !hasMenu) {
-    return <span className="text-xs text-muted-foreground">—</span>
-  }
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -103,39 +100,50 @@ export function RowActions({ appointment }: { appointment: Appointment }) {
         </Button>
       ) : null}
 
-      {hasMenu && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon-sm" variant="ghost" disabled={busy} aria-label="More actions">
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            {canReschedule && (
-              <DropdownMenuItem onSelect={() => setDialog('reschedule')}>
-                <CalendarClockIcon /> Reschedule
-              </DropdownMenuItem>
-            )}
-            {canNoShow && (
-              <DropdownMenuItem onSelect={() => statusMutation.mutate({ to: 'no_show' })}>
-                <UserXIcon /> Mark no-show
-              </DropdownMenuItem>
-            )}
-            {(canCancel || pending) && <DropdownMenuSeparator />}
-            {canCancel && (
-              <DropdownMenuItem variant="destructive" onSelect={() => setDialog('cancel')}>
-                <XIcon /> Cancel appointment
-              </DropdownMenuItem>
-            )}
-            {pending && (
-              <DropdownMenuItem variant="destructive" onSelect={() => setDialog('reject')}>
-                <XIcon /> Reject booking
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {/* Uploading a report is always possible, so the menu is always there. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="icon-sm" variant="ghost" disabled={busy} aria-label="More actions">
+            <MoreHorizontalIcon />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onSelect={() => setDialog('upload')}>
+            <FileUpIcon /> Upload report
+          </DropdownMenuItem>
+          {(canReschedule || canNoShow) && <DropdownMenuSeparator />}
+          {canReschedule && (
+            <DropdownMenuItem onSelect={() => setDialog('reschedule')}>
+              <CalendarClockIcon /> Reschedule
+            </DropdownMenuItem>
+          )}
+          {canNoShow && (
+            <DropdownMenuItem onSelect={() => statusMutation.mutate({ to: 'no_show' })}>
+              <UserXIcon /> Mark no-show
+            </DropdownMenuItem>
+          )}
+          {(canCancel || pending) && <DropdownMenuSeparator />}
+          {canCancel && (
+            <DropdownMenuItem variant="destructive" onSelect={() => setDialog('cancel')}>
+              <XIcon /> Cancel appointment
+            </DropdownMenuItem>
+          )}
+          {pending && (
+            <DropdownMenuItem variant="destructive" onSelect={() => setDialog('reject')}>
+              <XIcon /> Reject booking
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
+      {dialog === 'upload' && (
+        <ReportUploadDialog
+          patientId={appointment.patient.id}
+          patientName={appointment.patient.full_name}
+          open
+          onOpenChange={() => setDialog(null)}
+        />
+      )}
       {dialog === 'reschedule' && (
         <RescheduleDialog appointment={appointment} open onOpenChange={() => setDialog(null)} />
       )}

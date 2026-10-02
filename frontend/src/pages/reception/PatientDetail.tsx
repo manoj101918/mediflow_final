@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { SourceBadge, StatusBadge } from '@/components/appointments/Badges'
 import { useNewAppointment } from '@/components/appointments/newAppointmentContext'
+import { ReportsTab } from '@/components/chart/ReportsTab'
 import { PatientForm } from '@/components/patients/PatientForm'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -103,6 +104,16 @@ export function PatientDetailPage() {
               <p className="whitespace-pre-wrap">{p.notes}</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="patient-reports">
+        <CardHeader>
+          <CardTitle>Reports</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Front desk sees titles and indexing status only, never the contents. */}
+          <ReportsTab patientId={p.id} canView={false} />
         </CardContent>
       </Card>
 

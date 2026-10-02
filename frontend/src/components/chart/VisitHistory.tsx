@@ -23,11 +23,11 @@ const ALL = 'all'
 interface Props {
   patientId: string
   /** Expand and scroll to this visit (e.g. from a chatbot citation). */
-  focusConsultationId?: string | null
+  focus?: { id: string; token: number } | null
   onOpenReport: (reportId: string) => void
 }
 
-export function VisitHistory({ patientId, focusConsultationId, onOpenReport }: Props) {
+export function VisitHistory({ patientId, focus, onOpenReport }: Props) {
   const history = useQuery({
     queryKey: recordKeys.history(patientId),
     queryFn: ({ signal }) => fetchHistory(patientId, signal),
@@ -92,7 +92,7 @@ export function VisitHistory({ patientId, focusConsultationId, onOpenReport }: P
             visit={visit}
             patientId={patientId}
             defaultOpen={index === 0}
-            focused={visit.consultation_id === focusConsultationId}
+            focusToken={focus?.id === visit.consultation_id ? focus.token : null}
             onOpenReport={onOpenReport}
           />
         ))}
@@ -105,24 +105,25 @@ function VisitCard({
   visit,
   patientId,
   defaultOpen,
-  focused,
+  focusToken,
   onOpenReport,
 }: {
   visit: HistoryVisit
   patientId: string
   defaultOpen: boolean
-  focused: boolean
+  focusToken: number | null
   onOpenReport: (reportId: string) => void
 }) {
   // null = not toggled by the doctor yet; a focused (cited) visit is always shown open.
   const [toggled, setToggled] = useState<boolean | null>(null)
+  const focused = focusToken != null
   const open = focused || (toggled ?? defaultOpen)
   const setOpen = (update: (open: boolean) => boolean) => setToggled(update(open))
   const ref = useRef<HTMLLIElement>(null)
 
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [focused])
+  }, [focused, focusToken])
 
   return (
     <li
