@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     embedding_model: str = "voyage-4"
     # Must equal the vector(n) column in patient_record_chunks (checked below).
     embedding_dim: int = EMBEDDING_DIM
+    # Client-side pacing for the embedding API (Voyage free tier: 3/min). 0 = no limit.
+    embedding_requests_per_minute: int = Field(default=3, ge=0, le=10_000)
     rag_top_k: int = Field(default=6, ge=1, le=30)
     rag_chunk_size: int = Field(default=1000, ge=200, le=8000)
     rag_chunk_overlap: int = Field(default=150, ge=0, le=2000)

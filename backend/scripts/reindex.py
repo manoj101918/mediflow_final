@@ -46,6 +46,19 @@ async def main(patient: UUID | None) -> None:
             for r in await session.execute(_SOURCES, {"patient": patient})
         ]
         clinics = {clinic_id for clinic_id, *_ in rows}
+        # Jobs already waiting (backing off after errors, or given up) run now with fresh
+        # attempts, instead of a second job being queued behind them.
+        await session.execute(
+            text(
+                "update public.ingestion_jobs set status = 'pending', attempts = 0, "
+                "run_after = now(), last_error = null where status in ('pending', 'failed') "
+                "and (cast(:patient as uuid) is null or patient_id = cast(:patient as uuid)) "
+                "and not exists (select 1 from public.ingestion_jobs p where p.status = 'pending' "
+                "and p.source_type = ingestion_jobs.source_type "
+                "and p.source_id = ingestion_jobs.source_id and p.id <> ingestion_jobs.id)"
+            ),
+            {"patient": patient},
+        )
         for clinic_id, patient_id, kind, source_id in rows:
             await enqueue(session, clinic_id, patient_id, kind, source_id)
         # Reports go back to "pending" so the chart shows them being re-indexed.

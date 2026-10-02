@@ -11,18 +11,21 @@ questions over the seed clinic without saving chat messages. Paced for the Groq 
 
 import asyncio
 import re
+import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from uuid import UUID
 
 import pytest
+from langchain_core.embeddings import Embeddings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
 from app.db.models import Patient
 from app.services.booking.timeutil import clinic_tz, today_local
 from app.services.rag.chat import build_context
-from app.services.rag.citations import cited_numbers
+from app.services.rag.citations import cited_numbers, clean_markers
 from app.services.rag.providers import (
     ProviderNotConfiguredError,
     RagProviders,
@@ -34,7 +37,8 @@ from app.services.rag.providers import (
 pytestmark = pytest.mark.live
 
 PRAKASH = UUID("2037da99-bae2-d71e-a051-2f8a85bb826f")
-PAUSE_SECONDS = 12
+# Free tiers: Groq 8K tokens/min, Voyage 3 requests/min (one query embedding per question).
+PAUSE_SECONDS = 25
 NOT_IN_RECORDS = re.compile(
     r"(don.?t|do not|does not|doesn.?t) (contain|include|mention|have)|not (in|found in|"
     r"available in|recorded in|documented in) the (records|file)|no record|not recorded|"
@@ -76,6 +80,37 @@ CASES = (
 )
 
 
+def _rate_limited(exc: Exception) -> bool:
+    return getattr(exc, "status_code", None) == 429 or type(exc).__name__ == "RateLimitError"
+
+
+class RetryingEmbeddings(Embeddings):
+    """Waits out free-tier rate limits, so the eval measures real hybrid retrieval
+    (the app itself falls back to full-text search instead of waiting)."""
+
+    def __init__(self, inner: Embeddings) -> None:
+        self._inner = inner
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._inner.embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._inner.embed_query(text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self._inner.aembed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        for attempt in range(4):
+            try:
+                return await self._inner.aembed_query(text)
+            except Exception as exc:
+                if not _rate_limited(exc) or attempt == 3:
+                    raise
+                await asyncio.sleep(65)
+        raise AssertionError("unreachable")
+
+
 @pytest.fixture(scope="module")
 def providers() -> RagProviders:
     settings = get_settings()
@@ -85,7 +120,7 @@ def providers() -> RagProviders:
         return RagProviders(
             chat=build_chat_model(settings, "answer"),
             rewriter=build_chat_model(settings, "rewrite"),
-            embeddings=build_embeddings(settings),
+            embeddings=RetryingEmbeddings(build_embeddings(settings)),
             embedding_model=embedding_model_name(settings),
             chat_model=settings.llm_model,
         )
@@ -107,16 +142,17 @@ async def _answer(
     for attempt in range(3):
         try:
             reply = await providers.chat.ainvoke(context.messages)
-            return reply.text, len(context.sources)
+            return clean_markers(reply.text), len(context.sources)
         except Exception as exc:  # rate limited on the free tier: wait and retry
-            if getattr(exc, "status_code", None) != 429 or attempt == 2:
+            if not _rate_limited(exc) or attempt == 2:
                 raise
             await asyncio.sleep(60)
     raise AssertionError("unreachable")
 
 
 def _grade(case: Case, answer: str, source_count: int) -> tuple[bool, str]:
-    lowered = answer.lower()
+    # Models often use non-breaking spaces/hyphens ("12 Mar 2026"); compare plain text.
+    lowered = " ".join(unicodedata.normalize("NFKC", answer).split()).lower()
     cited = [n for n in cited_numbers(answer) if 1 <= n <= source_count]
     if case.unanswerable:
         ok = bool(NOT_IN_RECORDS.search(answer))
@@ -142,6 +178,10 @@ async def test_live_eval_scorecard(
         rows.append((ok, case, why, answer))
 
     passed = sum(ok for ok, *_ in rows)
+    # Answers can contain characters a Windows console code page cannot print.
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="replace")
     print(f"\n=== RAG live eval: {passed}/{len(rows)} passed ({get_settings().llm_model}) ===")
     for ok, case, why, answer in rows:
         kind = "N/A " if case.unanswerable else "fact"

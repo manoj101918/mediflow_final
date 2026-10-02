@@ -254,3 +254,10 @@ Phase 2 schema notes:
 - Groq free tier (`openai/gpt-oss-120b`): 8K tokens/min, so the prompt is capped at ~14K chars
   of records; 429s become a friendly `error` event. `asyncpg` needs `timedelta` (not strings)
   for `interval` parameters.
+- `gpt-oss` cites as `【n】` / `[n†L3-L5]` despite the prompt; `rag/citations.py` normalises
+  markers while streaming (`normalize_markers`) and in the stored answer (`clean_markers`),
+  and `AnswerText` accepts the `†` suffix. Answers also contain non-breaking spaces/hyphens.
+- Voyage without a payment method: 3 requests/min. `ThrottledEmbeddings`
+  (`EMBEDDING_REQUESTS_PER_MINUTE`) paces each process; separate processes (API worker,
+  scripts, live eval) do not share the budget, so avoid running them at the same time. The
+  retriever falls back to full-text search if the query embedding fails.

@@ -16,6 +16,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
+import structlog
 from langchain_core.callbacks import (
     AsyncCallbackManagerForRetrieverRun,
     CallbackManagerForRetrieverRun,
@@ -28,6 +29,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import vector_literal
+
+logger = structlog.get_logger(__name__)
 
 RRF_K = 60
 
@@ -162,10 +165,19 @@ class PatientRecordRetriever(BaseRetriever):
         return [by_id[i] for i in ids if i in by_id]
 
     async def search(self, query: str) -> list[ChunkHit]:
-        """Hybrid search; best first."""
-        vector = vector_literal(await self.embeddings.aembed_query(query))
+        """Hybrid search; best first.
+
+        If the embedding provider fails (e.g. rate-limited on a free tier), the answer still
+        gets full-text results instead of the whole question failing.
+        """
         pool = self.top_k * 3
-        semantic = await self._ids(_VECTOR, query=vector, limit=pool)
+        try:
+            vector = vector_literal(await self.embeddings.aembed_query(query))
+        except Exception as exc:
+            logger.warning("vector_search_skipped", error_type=type(exc).__name__)
+            semantic: list[UUID] = []
+        else:
+            semantic = await self._ids(_VECTOR, query=vector, limit=pool)
         lexical = await self._ids(_FULL_TEXT, query=query, limit=pool)
         fused = reciprocal_rank_fusion([semantic, lexical])[: self.top_k]
         return await self.fetch(fused)

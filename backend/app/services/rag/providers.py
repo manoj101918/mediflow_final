@@ -8,7 +8,10 @@ Chunks record which embedding model produced them (`embedding_model_name`), and 
 compares vectors from the same model.
 """
 
+import asyncio
 import re
+import threading
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import lru_cache
@@ -41,6 +44,59 @@ def embedding_model_name(settings: Settings | None = None) -> str:
     return FAKE_EMBEDDING_MODEL if settings.rag_fake_llm else settings.embedding_model
 
 
+class ThrottledEmbeddings(Embeddings):
+    """Spaces requests to stay under a provider's requests-per-minute limit.
+
+    Voyage's free tier allows 3 requests a minute; without this, indexing a few records in a
+    row is rate-limited. One request per call (a source's chunks are embedded together), and
+    chat questions share the same budget.
+    """
+
+    def __init__(self, inner: Embeddings, requests_per_minute: int) -> None:
+        self._inner = inner
+        self._interval = 60.0 / requests_per_minute
+        self._next = 0.0
+        self._async_lock: asyncio.Lock | None = None
+        self._sync_lock = threading.Lock()
+
+    def _reserve(self) -> float:
+        """Claim the next request slot; returns how long to wait for it."""
+        now = time.monotonic()
+        start = max(now, self._next)
+        self._next = start + self._interval
+        return start - now
+
+    async def _await_turn(self) -> None:
+        if self._async_lock is None:
+            self._async_lock = asyncio.Lock()
+        async with self._async_lock:
+            delay = self._reserve()
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    def _sync_turn(self) -> None:
+        with self._sync_lock:
+            delay = self._reserve()
+        if delay > 0:
+            time.sleep(delay)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self._sync_turn()
+        return self._inner.embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        self._sync_turn()
+        return self._inner.embed_query(text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        await self._await_turn()
+        return await self._inner.aembed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        await self._await_turn()
+        return await self._inner.aembed_query(text)
+
+
 def build_embeddings(settings: Settings) -> Embeddings:
     if settings.rag_fake_llm:
         return DeterministicFakeEmbedding(size=settings.embedding_dim)
@@ -50,12 +106,14 @@ def build_embeddings(settings: Settings) -> Embeddings:
     # Imported lazily: the Voyage client pulls in heavier dependencies.
     from langchain_voyageai import VoyageAIEmbeddings  # noqa: PLC0415
 
-    return VoyageAIEmbeddings(
+    voyage = VoyageAIEmbeddings(
         model=settings.embedding_model,
         voyage_api_key=SecretStr(key),
         output_dimension=settings.embedding_dim,
         batch_size=64,
     )
+    rpm = settings.embedding_requests_per_minute
+    return ThrottledEmbeddings(voyage, rpm) if rpm > 0 else voyage
 
 
 @lru_cache

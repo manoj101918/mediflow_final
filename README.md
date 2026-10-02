@@ -148,6 +148,7 @@ API docs: <http://localhost:8000/api/docs> (only when `ENV=dev`).
 | `LLM_MODEL`, `LLM_REASONING_EFFORT`, `LLM_MAX_TOKENS` | Default `openai/gpt-oss-120b` (Groq free tier), `low`, `1024`. |
 | `VOYAGE_API_KEY` | Embeddings provider (server-only). Without it indexing pauses; jobs stay queued. |
 | `EMBEDDING_MODEL`, `EMBEDDING_DIM` | Default `voyage-4`, `1024`. The dimension must match the `vector(1024)` column. Changing the model needs `scripts.reindex --all`. |
+| `EMBEDDING_REQUESTS_PER_MINUTE` | Client-side pacing of embedding calls per process, default `3` (Voyage without a payment method: 3 requests and 10K tokens per minute). `0` = no pacing. |
 | `RAG_TOP_K`, `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`, `RAG_MAX_HISTORY_TURNS` | Retrieval and chunking: `6`, `1000`, `150` characters, `4` turns. |
 | `RAG_FAKE_LLM` | `true` = deterministic fake chat model + fake embeddings (tests, E2E, demos without keys). |
 | `CHAT_RATE_LIMIT` | Questions per signed-in user, default `6/minute`. |
@@ -371,6 +372,11 @@ swapped. `RAG_FAKE_LLM=true` replaces both with deterministic fakes.
 - The Groq free tier allows about 8K tokens per minute (two or three questions a minute) and
   200K per day; the prompt is kept to roughly 4K tokens. A paid tier or another provider in
   `providers.py` removes the limit.
+- Voyage without a payment method allows 3 requests per minute: indexing runs at one record
+  every 20 seconds, and each chat question needs one embedding. If the embedding call is
+  rate-limited, the question is answered from full-text search alone. Adding a payment method
+  in the Voyage dashboard (the free token allowance still applies) lifts the limit; then set
+  `EMBEDDING_REQUESTS_PER_MINUTE=0` or a higher value.
 - Printing, e-prescriptions, ABDM/ABHA, drug interaction checks and a patient-facing
   assistant are out of scope.
 - "Bot requests to handle" polls every 30 seconds (those rows are not in the Realtime

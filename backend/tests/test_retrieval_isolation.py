@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from httpx import AsyncClient
+from langchain_core.embeddings import Embeddings
 from sqlalchemy import text
 
 from app.services.rag.retriever import PatientRecordRetriever
@@ -113,3 +114,30 @@ async def test_chat_cites_only_this_patient(
     events = dict(parse_sse(response.text))
     cited = {c["source_id"] for c in events["citations"]["citations"]}
     assert cited and cited <= ravi_sources
+
+
+class _RateLimitedEmbeddings(Embeddings):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("429")
+
+    def embed_query(self, text: str) -> list[float]:
+        raise RuntimeError("429")
+
+
+async def test_falls_back_to_full_text_when_embeddings_fail(
+    client: AsyncClient, clinic: ClinicFixture, ingestion: Ingestion
+) -> None:
+    s = await two_similar_patients(client, clinic)
+    await ingestion.run()
+    async with clinic.sessionmaker() as session:
+        retriever = PatientRecordRetriever(
+            session=session,
+            embeddings=_RateLimitedEmbeddings(),
+            clinic_id=clinic.id,
+            patient_id=s.ravi,
+            embedding_model=TEST_EMBEDDING_MODEL,
+            top_k=6,
+        )
+        hits = await retriever.search("Metformin HbA1c")
+    assert hits
+    assert {h.source_id for h in hits} <= await sources_of(clinic, s.ravi)

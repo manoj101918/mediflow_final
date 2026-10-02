@@ -114,7 +114,8 @@ function renderBlock(block: Block, key: number, inline: (value: string) => React
   }
 }
 
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[\d{1,3}(?:\s*,\s*\d{1,3})*\])/g
+// [2], [2, 4], and [2†L3-L5] (some models add a locator; it is not shown).
+const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[\d{1,3}(?:\s*,\s*\d{1,3})*(?:†[^\]]*)?\])/g
 
 function renderInline(
   value: string,
@@ -132,7 +133,7 @@ function renderInline(
         </code>
       )
     }
-    const marker = /^\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]$/.exec(part)
+    const marker = /^\[(\d{1,3}(?:\s*,\s*\d{1,3})*)(?:†[^\]]*)?\]$/.exec(part)
     if (marker) {
       return (
         <Fragment key={i}>

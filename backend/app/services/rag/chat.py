@@ -31,7 +31,7 @@ from app.db.models import (
 )
 from app.services.booking.actor import StaffActor
 from app.services.booking.results import BookingErrorCode, BookingResult, failure, success
-from app.services.rag.citations import citations_for
+from app.services.rag.citations import citations_for, clean_markers, normalize_markers
 from app.services.rag.prompt import MAX_CONTEXT_CHARS, Source, build_messages
 from app.services.rag.providers import ProviderNotConfiguredError, RagProviders
 from app.services.rag.retriever import ChunkHit, PatientRecordRetriever, sort_by_date
@@ -243,7 +243,7 @@ async def stream_turn(
     try:
         async with asyncio.timeout(settings.llm_timeout_seconds * 2):
             async for chunk in providers.chat.astream(prepared.messages):
-                piece = chunk.text
+                piece = normalize_markers(chunk.text)
                 if piece:
                     parts.append(piece)
                     yield ChatEvent("token", {"text": piece})
@@ -255,7 +255,7 @@ async def stream_turn(
             "chat_failed", session_id=str(prepared.session_id), error_type=type(exc).__name__
         )
 
-    answer = "".join(parts).strip()
+    answer = clean_markers("".join(parts)).strip()
     citations = [] if error else citations_for(answer, prepared.sources)
     async with sessionmaker() as session:
         message = PatientChatMessage(
