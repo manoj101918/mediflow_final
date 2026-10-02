@@ -8,6 +8,7 @@ JWT verifier: the bearer token is simply the auth user's id.
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import date, time
 from uuid import UUID
 
 import pytest
@@ -21,6 +22,7 @@ from app.core.security import InvalidTokenError, TokenClaims, get_jwt_verifier
 from app.db.models import UserRole
 from app.db.session import build_engine, get_session
 from app.main import create_app
+from app.services.booking.actor import StaffActor, SystemActor, SystemChannel
 
 
 @pytest.fixture(scope="session")
@@ -94,6 +96,81 @@ class ClinicFixture:
             )
         assert doctor_id is not None
         return UUID(str(doctor_id))
+
+    async def add_doctor(
+        self,
+        *,
+        windows: tuple[tuple[time, time], ...] = ((time(9), time(10)),),
+        weekdays: tuple[int, ...] = (0,),
+        slot_minutes: int = 15,
+        active: bool = True,
+        name: str = "Dr. Test",
+    ) -> UUID:
+        """A doctor with the given schedule windows on each weekday (0 = Monday)."""
+        doctor_id = uuid.uuid4()
+        async with self.sessionmaker() as session, session.begin():
+            await session.execute(
+                text(
+                    "insert into public.doctors (id, clinic_id, full_name, specialization, "
+                    "default_slot_minutes, is_active) values (:id, :cid, :name, 'General', "
+                    ":slot, :active)"
+                ),
+                {
+                    "id": doctor_id,
+                    "cid": self.id,
+                    "name": name,
+                    "slot": slot_minutes,
+                    "active": active,
+                },
+            )
+            for weekday in weekdays:
+                for start, end in windows:
+                    await session.execute(
+                        text(
+                            "insert into public.doctor_schedules (clinic_id, doctor_id, weekday, "
+                            "start_time, end_time) values (:cid, :did, :wd, :start, :end)"
+                        ),
+                        {
+                            "cid": self.id,
+                            "did": doctor_id,
+                            "wd": weekday,
+                            "start": start,
+                            "end": end,
+                        },
+                    )
+        return doctor_id
+
+    async def add_leave(self, doctor_id: UUID, day: date) -> None:
+        async with self.sessionmaker() as session, session.begin():
+            await session.execute(
+                text(
+                    "insert into public.doctor_leaves (clinic_id, doctor_id, leave_date) "
+                    "values (:cid, :did, :day)"
+                ),
+                {"cid": self.id, "did": doctor_id, "day": day},
+            )
+
+    async def add_patient(self, name: str = "Test Patient", phone: str = "+919800000001") -> UUID:
+        patient_id = uuid.uuid4()
+        async with self.sessionmaker() as session, session.begin():
+            await session.execute(
+                text(
+                    "insert into public.patients (id, clinic_id, full_name, phone) "
+                    "values (:id, :cid, :name, :phone)"
+                ),
+                {"id": patient_id, "cid": self.id, "name": name, "phone": phone},
+            )
+        return patient_id
+
+    async def staff(self, role: UserRole = UserRole.RECEPTIONIST) -> StaffActor:
+        """A real staff profile in this clinic, as a booking actor."""
+        link = role == UserRole.DOCTOR
+        user_id = await self.add_user(role, link_doctor=link)
+        doctor_id = await self.doctor_id_for(user_id) if link else None
+        return StaffActor(user_id=user_id, role=role, clinic_id=self.id, doctor_id=doctor_id)
+
+    def system(self, channel: SystemChannel = "whatsapp") -> SystemActor:
+        return SystemActor(channel=channel, clinic_id=self.id)
 
 
 @pytest.fixture

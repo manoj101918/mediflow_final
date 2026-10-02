@@ -159,6 +159,8 @@ class DoctorLeave(Base):
 
 class Patient(Base):
     __tablename__ = "patients"
+    # Fetch trigger/server-maintained columns via RETURNING on UPDATE too (async-safe).
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
 
     id: Mapped[UUID] = _uuid_pk()
     clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
@@ -179,6 +181,8 @@ class Patient(Base):
 
 class Appointment(Base):
     __tablename__ = "appointments"
+    # Fetch trigger/server-maintained columns via RETURNING on UPDATE too (async-safe).
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
 
     id: Mapped[UUID] = _uuid_pk()
     clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
