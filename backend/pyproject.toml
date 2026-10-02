@@ -1,0 +1,60 @@
+[project]
+name = "mediflow-backend"
+version = "0.1.0"
+description = "MediFlow clinic management API (Phase 1: reception, doctor, admin)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "email-validator>=2.3.0",
+    "fastapi>=0.142.2",
+    "phonenumbers>=9.0.40",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.15.0",
+    "pyjwt[crypto]>=2.15.1",
+    "slowapi>=0.1.10",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "structlog>=26.1.0",
+    "supabase>=2.31.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+python-preference = "only-system"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "S", "ASYNC", "RUF", "SIM", "PL"]
+ignore = ["PLR0913", "PLR2004", "PLR0911", "PLR0912"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR2004"]
+"scripts/**" = ["S105", "T201"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+files = ["app"]
+
+[[tool.mypy.overrides]]
+module = ["slowapi.*", "supabase.*", "gotrue.*", "structlog.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=1.18,<2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff==0.15.0",
+]
