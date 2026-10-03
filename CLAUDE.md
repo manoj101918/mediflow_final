@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 MediFlow: clinic system (reception, doctor chart with clinical records, a patient-record
-chatbot, and the clinic's in-house lab). FastAPI backend (`backend/`) on Supabase Postgres + pgvector, React + TypeScript
+chatbot, the clinic's in-house lab, and a WhatsApp / voice booking bot). FastAPI backend (`backend/`) on Supabase Postgres + pgvector, React + TypeScript
 frontend (`frontend/`), SQL migrations in `supabase/`. `README.md` has full setup, env vars,
 the bot API contract, how the RAG pipeline works and the list of product decisions; read it
 for product behaviour questions.
@@ -20,7 +20,7 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy app scripts t
 uv run python -m pytest -q -p no:logging                      # full suite, ~10 min (remote DB)
 uv run python -m pytest tests/test_booking_create.py -q       # one file
 uv run python -m pytest "tests/test_inbound.py::test_rate_limit" -q
-uv run python -m pytest -m live -s tests/live                 # live RAG eval (real API keys)
+uv run python -m pytest -m live -s tests/live                 # live RAG eval + bot services (real keys)
 uv run python -m uvicorn app.main:app --port 8000             # do NOT use --reload (see Gotchas)
 RAG_FAKE_LLM=true uv run python -m uvicorn app.main:app --port 8000   # no API keys (E2E)
 uv run python -m scripts.seed_users                           # after supabase/seed.sql
@@ -170,6 +170,54 @@ admin catalog in `app/api/admin.py`.
 - **Numbers:** `numbers.py`: `LAB-YYYYMMDD-NNNN` and `S-YYMMDD-NNNN` per clinic-local day under
   advisory locks (ordered by length then value).
 
+### Booking bot (`app/services/conversation/`, `whatsapp/`, `messaging/`, `bot_jobs/`, `speech/`)
+Must run at ₹0: every paid feature is behind a setting that is off by default. README has the
+flow, costs and the non-expert WhatsApp setup guide.
+- **Engine** (`conversation/engine.py`, no FastAPI): deterministic state machine on a plain
+  `ConvState` snapshot (never ORM objects across booking calls). `handle()` returns new state,
+  `Reply`s (text / ≤3 buttons / ≤10 rows; voice channels page at 3 with a `more` option) and
+  effects (handoff, alert, consent, opt-out). `turn.run_turn` saves state (optimistic
+  `version`), effects, outbox rows (key `reply:<message id>:<n>`) and the inbound message
+  status in ONE transaction; a lost version race re-runs the turn once.
+- Global checks first: stale (older `sent_at`) → ignored except STOP/emergency; opted out
+  (`contact_preferences`, any channel) → only START; STOP; emergency (108/112 reply + alert +
+  handoff); handoff open → silent; medical question → refusal; "menu"/"hi" → menu.
+- **Bookings** go through `services/inbound.record_request/process_request` with
+  `external_ref = <conversation id>:<attempt_counter>` (attempt +1 after every submit). On
+  SLOT_TAKEN etc. the request is `mark_rejected` ("handled by the bot") and suggestions are
+  offered. Cancel/reschedule use `SystemActor(..., phone_e164=sender)`: bots may change only
+  upcoming pending/scheduled appointments of patients with that phone
+  (`booking/ownership.py`, others NOT_FOUND); a bot reschedule resets to pending.
+- **Understanding:** `options.match_option` (ids, numbers in te/hi/en, titles, a distinctive
+  last word unless another title shares it), `_yes_no`, `dates.resolve_date/parse_time`
+  (relative dates in code), then `intent.py` (`RuleParser`, or `GroqParser` with rules as
+  fallback when `BOT_LLM_ENABLED`; `translit.py` matches శర్మ/शर्मा to Sharma). Parsed values
+  become draft `hints` consumed once by the doctor/day/slot steps; booking always needs the
+  Confirm button. Two failed parses → handoff `parse_failed`.
+- **i18n:** every patient string is in `conversation/i18n.py` (te/hi/en; button ≤20, row ≤24
+  chars, checked by tests). Files with Indic text carry `# ruff: noqa: RUF001`.
+- **WhatsApp:** `api/whatsapp.py` verifies `X-Hub-Signature-256`, inserts `channel_messages`
+  (`on conflict (wamid) do nothing`) + a `bot_jobs` row, returns 200. `BotWorker` (lifespan,
+  `BOT_WORKER_ENABLED`, skips `pytest-clinic-%`) runs kinds `inbound` (normalize → voice notes
+  via `whatsapp/voice.py`: download, STT, store transcript only → `run_turn` → `send_now`),
+  `status` (retried until the message exists; ranks only move forward) and `outbox`.
+  `whatsapp/client.py`: `PyWaSender` (pywa_async, send-only, our own webhook route),
+  `FakeWhatsApp` (`WHATSAPP_FAKE`, tests), `check_connection` (cached Graph read).
+- **Messaging** (`messaging/dispatch.py`): only `pending` rows are sent, under a row lock.
+  Checks: opted out (except `opt_out` kind), consent (`notice`/`opt_out`/`emergency` exempt),
+  24 h window (last inbound WhatsApp message), free-tier meter (`bot_usage_monthly`: non-
+  essential stop at limit − reserve, essential at limit). Failures → `blocked` + reason.
+  `web_voice` rows are marked sent without a channel call. `notify.notify_decision` (called by
+  the approve/reject routes, which return `DecisionOut.notification`) queues approval /
+  rejection (with ≤3 alternative slots, conversation moved to the slot step).
+- **Reception/admin:** `api/bot.py` (FrontDeskUser: inbox, transcript, reply → 409
+  `WINDOW_CLOSED`/`OPTED_OUT`, resume, alerts, appointment → conversation), `api/bot_admin.py`
+  (status, keyword lists), `api/voice_sim.py` + `services/voice_sim.py` (AdminUser; STT →
+  `run_turn` on `web_voice` → dispatch → `speakable` → TTS; books into the admin's clinic;
+  `get_speech_providers` dependency, tests override it). Speech factories: `speech/stt.py`
+  (Sarvam → Groq Whisper fallback, fake = UTF-8 bytes, `TOO_LONG` sentinel), `speech/tts.py`
+  (browser default, Sarvam Bulbul v2, fake). `RAG_FAKE_LLM=true` makes STT/TTS/intents fake.
+
 ### Time
 Timestamps are timestamptz and API responses are always UTC (`UtcDateTime` in
 `schemas/common.py`). Days, slots and tokens are clinic-local. A DB trigger sets
@@ -183,7 +231,8 @@ timestamps with a fixed `+05:30`.
   JWKS (ES256), with 30 s leeway because Supabase's clock is slightly ahead.
   `deps.get_current_user` loads the active profile, clinic and linked doctor.
 - **Role guards:** `FrontDeskUser` (receptionist + admin), `AdminUser`, `LabUser`
-  (technician + supervisor), `AuthUser`.
+  (technician + supervisor), `AuthUser`. `BotDispatch` (`get_dispatch_deps`) gives routes the
+  WhatsApp sender and free-tier limits; tests override it.
 - **Two access paths to the data:**
   - FastAPI connects as the DB owner, bypasses RLS, and scopes by clinic and doctor in code.
   - **RLS** (`supabase/migrations/*_rls.sql`, helpers in the `private` schema) governs
@@ -207,6 +256,14 @@ timestamps with a fixed `+05:30`.
   `lib/reports.ts`), chat with `'patient-chat'` (`lib/chat.ts`). Lab (`lib/labs.ts`, `labKeys`):
   lab screens, inbox and alerts under `'labs'`; chart lab data under `'patient-records'`;
   Today counts under `['appointments', 'lab-summary', day]`; reception lists under `'patients'`.
+  Bot (`lib/bot.ts`, `botKeys`): inbox, transcripts, alerts, admin status/keywords, simulator
+  messages under `'bot'` (polled every 10 s, no Realtime); "View chat" lookup under
+  `['appointments', 'conversation', id]`.
+- **Bot UI:** `pages/reception/Inbox.tsx`, `components/bot/*` (`EmergencyBanner` in
+  `ReceptionLayout` via `SidebarShell`'s `banner` prop, `ViewChatButton`, `ChatTranscript`,
+  `showNotificationToast` after approve/reject), `pages/admin/WhatsApp.tsx`,
+  `pages/admin/VoiceSimulator.tsx` (MediaRecorder push-to-talk, typed/tapped fallback, plays
+  `audio_base64` or uses `speechSynthesis`).
 - **Doctor chart:** `/doctor/patients/:patientId?appointment=` (`pages/doctor/PatientChart.tsx`,
   `components/chart/*`, `components/chat/*`). The current-visit form autosaves through
   `hooks/useAutosave.ts` (serialised saves, `flush()` before Complete). Reports poll every 3 s
@@ -230,6 +287,12 @@ timestamps with a fixed `+05:30`.
   `data-citation-type`. Lab: `data-lab-order-id`, `data-lab-item-id` / `data-lab-item-status`,
   `data-parameter`, `data-flag`, `data-live-flag`, `data-sample-code`, `data-lab-badge`,
   `data-testid="order-tests" | "lab-inbox" | "critical-alerts" | "lab-patient-name"`.
+  Bot: `data-pending-appointment-id` (pending card rows), `data-view-chat`,
+  `data-conversation-id` / `data-handoff-status`, `data-conversation-detail`, `data-window`,
+  `data-bot-alert-id`, `data-message-direction`, `data-sim-option`, `data-sim-who`,
+  `data-outbox-kind`, `data-keyword-list`, `data-testid="bot-inbox" | "bot-emergencies" |
+  "chat-transcript" | "voice-sim" | "sim-text" | "sim-log" | "sim-options" | "sim-outbox" |
+  "usage-meter" | "whatsapp-status"`.
 
 ## Schema changes
 The schema is owned by SQL migrations, never by SQLAlchemy.
@@ -269,6 +332,16 @@ Phase 3 schema notes:
 - `patient_reports.lab_order_id` is `on delete cascade` (lab PDFs belong to their order);
   generated reports may have `size_bytes = 0` until the worker renders them.
 
+Phase 4 schema notes:
+- `phase4_bot_schema`: `bot_conversations` (unique clinic/channel/phone, `state` is text so
+  engine states need no migration, `version` for optimistic locking), `channel_messages`
+  (unique `wamid` when not null), `message_outbox` (unique `idempotency_key`, unique `wamid`),
+  `contact_preferences` (one row per clinic+phone: opt-out covers every channel),
+  `consent_events`, `bot_jobs`, `bot_usage_monthly`, `bot_alerts`, `bot_keyword_lists`.
+  Enums `bot_channel` (whatsapp | web_voice | phone), `bot_handoff_status`,
+  `message_direction`, `channel_message_status`, `outbox_status`.
+- All are backend-only (RLS on, no policies, no grants, not in Realtime).
+
 ## Tests
 - Backend tests hit the real database from `TEST_DATABASE_URL`. The `clinic` fixture
   (`tests/conftest.py`) creates a throwaway clinic, auth users and data per test and deletes
@@ -292,6 +365,13 @@ Phase 3 schema notes:
   by code), `clinic.set_lab_verification(bool)`. `tests/lab_utils.LabWorld` builds every role
   plus Ravi (male, 56) in consultation and drives the flow through the API (`ordered`,
   `collect`, `save`, `act`, `released(...)`).
+- Bot fixtures: `tests/bot_utils.Bot` drives `run_turn` directly (`start(lang)`, `send`,
+  `press(prefix)`, `options()`, `conversation()`; pass `understand=RuleParser()` for free
+  text). The `wa` fixture (`tests/whatsapp_utils.WhatsAppHarness`) wires a clinic to signed
+  webhook posts and a `FakeWhatsApp` (`say`, `choose(prefix)`, `voice(media_id)` with
+  `fake.media`, `run()` = this clinic's bot jobs, `book(lang)`), and overrides
+  `get_dispatch_deps`. Its deps use `FakeSTT` and `RuleParser`. Simulator tests override
+  `get_speech_providers`.
 - The default suite never calls paid APIs. `tests/live/` is marked `live` (deselected by
   `addopts`); it needs real keys and the clinical seed.
 
@@ -326,6 +406,16 @@ Phase 3 schema notes:
 - `gpt-oss` cites as `【n】` / `[n†L3-L5]` despite the prompt; `rag/citations.py` normalises
   markers while streaming (`normalize_markers`) and in the stored answer (`clean_markers`),
   and `AnswerText` accepts the `†` suffix. Answers also contain non-breaking spaces/hyphens.
+- WhatsApp needs a public HTTPS URL: ngrok is installed via winget (`Ngrok.Ngrok`, updated
+  with `ngrok update`; Smart App Control allows it) at
+  `%LOCALAPPDATA%\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe`.
+  Run `ngrok http --url=<static domain> 8000`. The worker runs inside the API process, so a
+  stale API (old code) also means a stale bot: restart it after backend changes.
+- Meta (since 2026-10-01): 1,000 free service messages per business number per month, then
+  nothing is delivered without a payment method. The meter counts sends; never add template
+  sends without `WHATSAPP_ALLOW_PAID_TEMPLATES`.
+- The bot rejects names containing digits, so E2E callers use names like "Voice Simulator
+  Patient" (+919999000222), never "E2E …".
 - Voyage without a payment method: 3 requests/min. `ThrottledEmbeddings`
   (`EMBEDDING_REQUESTS_PER_MINUTE`) paces each process; separate processes (API worker,
   scripts, live eval) do not share the budget, so avoid running them at the same time. The

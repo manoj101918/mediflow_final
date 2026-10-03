@@ -8,6 +8,7 @@ dependencies = [
     "email-validator>=2.3.0",
     "fastapi>=0.142.2",
     "fpdf2>=2.8.9",
+    "httpx>=0.28.1",
     "langchain-core>=1.6.6",
     "langchain-groq>=1.1.3",
     "langchain-text-splitters>=1.1.2",
@@ -19,6 +20,7 @@ dependencies = [
     "pyjwt[crypto]>=2.15.1",
     "pypdf>=6.19.0",
     "python-multipart>=0.0.32",
+    "pywa>=4.5,<5",
     "slowapi>=0.1.10",
     "sqlalchemy[asyncio]>=2.0.36",
     "structlog>=26.1.0",
@@ -66,7 +68,7 @@ asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 # Live evaluation calls the real LLM/embedding APIs: run explicitly with `-m live`.
 addopts = "-m 'not live'"
-markers = ["live: calls real model provider APIs (needs GROQ_API_KEY and VOYAGE_API_KEY)"]
+markers = ["live: calls real provider APIs (Groq, Voyage, Meta WhatsApp, Sarvam); needs their keys"]
 
 [dependency-groups]
 dev = [
