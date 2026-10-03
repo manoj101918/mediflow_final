@@ -74,6 +74,12 @@ CASES = (
     ),
     Case("What was the urine microalbumin result?", (("18",),)),
     Case("When is the next follow-up due?", (("15 dec", "dec 15", "2026-12-15", "december"),)),
+    # Structured lab results (Phase 3 backfill of the seed lab reports).
+    Case("What was the fasting blood sugar in December 2025?", (("168",),)),
+    Case("What was the post-prandial blood sugar on the first lab test?", (("246",),)),
+    Case("What is the latest triglyceride level?", (("160",),)),
+    Case("Which values were flagged high in the latest lab results?", (("ldl",), ("triglycer",))),
+    Case("What was the serum creatinine?", (("0.9",),)),
     Case("What is his HIV status?", unanswerable=True),
     Case("Has he ever had a colonoscopy?", unanswerable=True),
     Case("What was his vitamin B12 level?", unanswerable=True),

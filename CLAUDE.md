@@ -2,8 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-MediFlow: clinic system (reception, doctor chart with clinical records, and a patient-record
-chatbot). FastAPI backend (`backend/`) on Supabase Postgres + pgvector, React + TypeScript
+MediFlow: clinic system (reception, doctor chart with clinical records, a patient-record
+chatbot, and the clinic's in-house lab). FastAPI backend (`backend/`) on Supabase Postgres + pgvector, React + TypeScript
 frontend (`frontend/`), SQL migrations in `supabase/`. `README.md` has full setup, env vars,
 the bot API contract, how the RAG pipeline works and the list of product decisions; read it
 for product behaviour questions.
@@ -25,6 +25,7 @@ uv run python -m uvicorn app.main:app --port 8000             # do NOT use --rel
 RAG_FAKE_LLM=true uv run python -m uvicorn app.main:app --port 8000   # no API keys (E2E)
 uv run python -m scripts.seed_users                           # after supabase/seed.sql
 uv run python -m scripts.seed_clinical                        # synthetic clinical history + PDFs
+uv run python -m scripts.seed_lab                             # lab catalog, backfilled results, open orders
 uv run python -m scripts.reindex --patient <id> | --all       # rebuild chatbot chunks
 ```
 
@@ -133,6 +134,42 @@ Same pattern as booking (actor in, `BookingResult` out, no FastAPI imports).
 - vectors are bound as text (`vector_literal`) and cast in SQL; there is no numpy/pgvector
   Python dependency and vectors are never loaded into Python.
 
+### In-house lab (`app/services/labs/`)
+Same pattern (actor in, `BookingResult` out, no FastAPI imports); router `app/api/labs.py`,
+admin catalog in `app/api/admin.py`.
+- **Roles:** `lab_technician`, `lab_supervisor` (`LabUser` guard, `StaffActor.is_lab`). The
+  per-clinic `clinics.lab_requires_verification` (default true) decides whether release needs
+  a supervisor. `transitions.py` is the pure table: allowed moves per action
+  (`allowed_sources`) and per role (`role_allowed`), and `derive_order_status`.
+- **Access:** doctors (`clinician_check`) read any clinic patient's results and order only on
+  their own `checked_in`/`in_consultation` appointment (others: NOT_FOUND). Lab staff get
+  identifiers + order + note + same-parameter history (`read.lab_order_detail`); every
+  records/chat service already rejects non-doctors. Reception/admin: counts and statuses only
+  (`status_summary`, `patient_order_statuses`), never values.
+- **Writes** (`workflow.py`, `orders.py`, `alerts.py`) lock the order row first, then the item
+  (`common.lock_item`), record `lab_order_events` (ids/statuses only), re-derive the order
+  status and touch `lab_orders.updated_at` (the Realtime ping) via `refresh_order`.
+- **Results:** `ranges.select_range` (age band > sex-specific > any, narrowest band) at the
+  collection date; `snapshot_result` copies name/unit/range/flag onto the row; values are
+  quantized to the parameter's `decimals` (`parse_value`). Critical values need
+  `confirm_critical`. Amendments insert version n+1 and retire the old row; the DB trigger
+  `prevent_released_result_edit` (MF001 → RECORD_LOCKED) blocks any other change to a released
+  result.
+- **Release** (`release_in_session`, one transaction): statuses/timestamps, critical alerts
+  for the ordering doctor, the generated `patient_reports` row (`is_generated`, size 0 until
+  rendered), `enqueue(LAB_RESULT, order_id)`, the `lab_report_released` event, and clears
+  `reviewed_at` so the order is back in the doctor's inbox.
+- **Ingestion:** the worker's `LAB_RESULT` handler (source_id = order id) indexes one chunk
+  per released test (`labs/render.py`, metadata `order_item_id`), renders the PDF
+  (`labs/pdf.py`, fpdf2 core fonts → Latin-1 only, `_latin1`) and uploads it with
+  `upsert=True`, then marks all the order's reports indexed. Lab-linked reports (generated or
+  machine PDFs, `patient_reports.lab_order_id`) never get a `report` job.
+- **Chatbot:** `lab_result` citations carry `item_id` (schemas/chat.py); trend questions also
+  pull recent lab chunks; `snapshot.py` adds abnormal values (12 months) and open critical
+  alerts via `labs.render.lab_summary_lines`.
+- **Numbers:** `numbers.py`: `LAB-YYYYMMDD-NNNN` and `S-YYMMDD-NNNN` per clinic-local day under
+  advisory locks (ordered by length then value).
+
 ### Time
 Timestamps are timestamptz and API responses are always UTC (`UtcDateTime` in
 `schemas/common.py`). Days, slots and tokens are clinic-local. A DB trigger sets
@@ -145,7 +182,8 @@ timestamps with a fixed `+05:30`.
   JWT (`frontend/src/lib/api.ts`). `app/core/security.py` verifies it against the project
   JWKS (ES256), with 30 s leeway because Supabase's clock is slightly ahead.
   `deps.get_current_user` loads the active profile, clinic and linked doctor.
-- **Role guards:** `FrontDeskUser` (receptionist + admin), `AdminUser`, `AuthUser`.
+- **Role guards:** `FrontDeskUser` (receptionist + admin), `AdminUser`, `LabUser`
+  (technician + supervisor), `AuthUser`.
 - **Two access paths to the data:**
   - FastAPI connects as the DB owner, bypasses RLS, and scopes by clinic and doctor in code.
   - **RLS** (`supabase/migrations/*_rls.sql`, helpers in the `private` schema) governs
@@ -166,7 +204,9 @@ timestamps with a fixed `+05:30`.
 - **Query keys:** everything appointment-related starts with `'appointments'` (see
   `lib/appointments.ts`; slots and inbound lists live under it too), patients with
   `'patients'`, clinical data and reports with `'patient-records'` (`lib/records.ts`,
-  `lib/reports.ts`), chat with `'patient-chat'` (`lib/chat.ts`).
+  `lib/reports.ts`), chat with `'patient-chat'` (`lib/chat.ts`). Lab (`lib/labs.ts`, `labKeys`):
+  lab screens, inbox and alerts under `'labs'`; chart lab data under `'patient-records'`;
+  Today counts under `['appointments', 'lab-summary', day]`; reception lists under `'patients'`.
 - **Doctor chart:** `/doctor/patients/:patientId?appointment=` (`pages/doctor/PatientChart.tsx`,
   `components/chart/*`, `components/chat/*`). The current-visit form autosaves through
   `hooks/useAutosave.ts` (serialised saves, `flush()` before Complete). Reports poll every 3 s
@@ -177,13 +217,19 @@ timestamps with a fixed `+05:30`.
 - **Realtime:** `hooks/useRealtimeAppointments.ts` invalidates both key prefixes on any row
   change, which is how every open screen stays live. Mutations use
   `useAppointmentMutation`, which always refetches afterwards.
-- **Routing:** `src/router.tsx` builds each role area with `area()`: `RequireRole` guard →
-  lazily loaded layout → lazily loaded pages. `ReceptionLayout` owns the realtime
+- **Lab Realtime:** `hooks/useRealtimeLabs.ts`: `useRealtimeLabOrders` (in `DoctorLayout` and
+  `LabLayout`) invalidates every lab query on any `lab_orders` change; `useRealtimeLabAlerts`
+  drives `CriticalAlertBanner`. Reception has no lab Realtime (RLS excludes it) and polls.
+- **Routing:** `src/router.tsx` builds each role area with `area()` (a list of roles):
+  `RequireRole` guard → lazily loaded layout → lazily loaded pages. `/lab` serves both lab
+  roles; `/lab/orders/:id/labels` is a bare print page outside the layout. `ReceptionLayout` owns the realtime
   subscription and the booking sheet (`NewAppointmentContext`, hotkey `N`, lazy-loaded).
 - **Test hooks:** rows carry `data-appointment-id` / `data-status`; chart elements carry
   `data-consultation-id`, `data-report-id` / `data-report-status`, `data-allergy`; chat uses
   `data-testid="chat-panel"`, `data-chat-role`, `data-chat-message-id`, `data-citation` /
-  `data-citation-type`.
+  `data-citation-type`. Lab: `data-lab-order-id`, `data-lab-item-id` / `data-lab-item-status`,
+  `data-parameter`, `data-flag`, `data-live-flag`, `data-sample-code`, `data-lab-badge`,
+  `data-testid="order-tests" | "lab-inbox" | "critical-alerts" | "lab-patient-name"`.
 
 ## Schema changes
 The schema is owned by SQL migrations, never by SQLAlchemy.
@@ -211,6 +257,18 @@ Phase 2 schema notes:
 - The `patient-reports` bucket (private, 10 MB, pdf/jpeg/png) was created by migration; its
   size limit must match `REPORT_MAX_MB`. No `storage.objects` policies (service role only).
 
+Phase 3 schema notes:
+- Enum values were added in their own migration (`phase3_enum_values`); `ADD VALUE` can't be
+  used in the transaction that adds it.
+- Only `lab_orders` (doctors + lab roles of the clinic) and `lab_critical_alerts` (its doctor)
+  have SELECT grants/policies and are in `supabase_realtime`. `lab_results` and the other lab
+  tables are backend-only. `lab_orders` carries the doctor's clinical note, which is why
+  reception is excluded.
+- Catalog/doctor FKs on lab rows are `deferrable initially deferred` so whole-clinic cascades
+  (test teardown) work; tests and parameters are deactivated, never deleted.
+- `patient_reports.lab_order_id` is `on delete cascade` (lab PDFs belong to their order);
+  generated reports may have `size_bytes = 0` until the worker renders them.
+
 ## Tests
 - Backend tests hit the real database from `TEST_DATABASE_URL`. The `clinic` fixture
   (`tests/conftest.py`) creates a throwaway clinic, auth users and data per test and deletes
@@ -230,6 +288,10 @@ Phase 2 schema notes:
   (`await ingestion.run()` processes only this clinic's jobs), `rag` (fake chat model wired
   into the chat endpoint, chat limiter reset), `parse_sse(body)`. `tests/records_utils.Chart`
   builds reception/admin/three doctors/two patients with an in-consultation visit.
+- Lab fixtures: `clinic.add_lab_catalog()` (bulk-inserts the starter catalog, returns test ids
+  by code), `clinic.set_lab_verification(bool)`. `tests/lab_utils.LabWorld` builds every role
+  plus Ravi (male, 56) in consultation and drives the flow through the API (`ordered`,
+  `collect`, `save`, `act`, `released(...)`).
 - The default suite never calls paid APIs. `tests/live/` is marked `live` (deselected by
   `addopts`); it needs real keys and the clinical seed.
 
@@ -249,6 +311,13 @@ Phase 2 schema notes:
   run their own clinic's jobs with `run_pending(clinic_id=…)`.
 - A running API with `RAG_FAKE_LLM=true` indexes with the fake model; chunks are stored per
   embedding model, so after switching to Voyage run `scripts.reindex --all`.
+- Lab E2E (`lab.spec.ts`) and the smoke scripts use their own patient "E2E Lab Patient"
+  (+919999000111), never the demo patients, and book from tomorrow on (Sundays have no slots).
+  Released lab results can't be cancelled; they stay on that test patient.
+- A long-running Vite dev server can serve stale Tailwind CSS for newly added files (classes
+  like `lg:` or arbitrary values missing). Restart Vite if a new page's layout looks wrong.
+- Ruff's formatter rewrites `\u` escapes into literal characters and then RUF001 flags
+  ambiguous ones (en dash, curly quote): build such strings with `chr()` / `str.maketrans`.
 - E2E (`doctor-chart.spec.ts`) needs the API in `RAG_FAKE_LLM=true` mode and the clinical
   seed. Playwright starts the API that way, but reuses an already running server as is.
 - Groq free tier (`openai/gpt-oss-120b`): 8K tokens/min, so the prompt is capped at ~14K chars

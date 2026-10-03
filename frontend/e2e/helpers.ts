@@ -65,3 +65,20 @@ export async function cancelTagged(token: string, date: string, tag: string): Pr
   }
   return mine.length
 }
+
+/**
+ * The first day from tomorrow on (within a week) when `doctorId` has free slots, with its
+ * offset from today. E2E bookings never go on today (the dev clinic is shared), and doctors
+ * have days off (e.g. Sundays).
+ */
+export async function nextOpenDay(
+  token: string,
+  doctorId: string,
+): Promise<{ date: string; offset: number; slots: { starts_at: string }[] }> {
+  for (let offset = 1; offset <= 7; offset++) {
+    const date = clinicDate(offset)
+    const day = await api<{ slots: { starts_at: string }[] }>(token, `/doctors/${doctorId}/slots?date=${date}`)
+    if (day.slots.length > 0) return { date, offset, slots: day.slots }
+  }
+  throw new Error(`No free slots for doctor ${doctorId} in the next week`)
+}

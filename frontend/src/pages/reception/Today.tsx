@@ -26,6 +26,7 @@ import {
   fetchDoctors,
 } from '@/lib/appointments'
 import { clinicDate, formatWeekdayDate } from '@/lib/format'
+import { fetchLabSummary, labKeys } from '@/lib/labs'
 import type { Appointment, AppointmentStatus } from '@/types/api'
 
 const VIEWS = {
@@ -60,6 +61,17 @@ function matchesSearch(a: Appointment, search: string): boolean {
 
 export function TodayPage() {
   const today = clinicDate(useNow())
+  // Lab test counts per appointment. Reception has no lab Realtime (the order row carries the
+  // doctor's clinical note), so poll; appointment changes refresh it too.
+  const labSummary = useQuery({
+    queryKey: labKeys.summary(today),
+    queryFn: ({ signal }) => fetchLabSummary(today, signal),
+    refetchInterval: 30_000,
+  })
+  const labCounts = useMemo(
+    () => new Map((labSummary.data ?? []).map((c) => [c.appointment_id, c])),
+    [labSummary.data],
+  )
   const [view, setView] = useState<View>('active')
   const [doctorId, setDoctorId] = useState('all')
   const [search, setSearch] = useState('')
@@ -173,6 +185,7 @@ export function TodayPage() {
         ) : (
           <AppointmentTable
             appointments={visible}
+            labCounts={labCounts}
             loading={dayQuery.isPending}
             empty={
               search

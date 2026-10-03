@@ -1,24 +1,24 @@
 import { expect, test } from '@playwright/test'
 
-import { api, apiToken, cancelTagged, clinicDate, newSignedInPage } from './helpers.ts'
+import { api, apiToken, cancelTagged, newSignedInPage, nextOpenDay } from './helpers.ts'
 
 // Needs the API running with RAG_FAKE_LLM=true (Playwright starts it that way when it is not
 // already running) and the clinical seed (backend: python -m scripts.seed_clinical).
-// Acts only on an appointment it books for tomorrow, and cancels it afterwards.
-const TOMORROW = clinicDate(1)
+// Acts only on an appointment it books from tomorrow on, and cancels it afterwards.
+let DAY = ''
 const TAG = `E2E chart ${Date.now()}`
 const PRAKASH = '2037da99-bae2-d71e-a051-2f8a85bb826f' // seed test patient
 const DR_KHAN = 'd0c00000-0000-4000-8000-000000000003'
 
 test.afterAll(async () => {
-  await cancelTagged(await apiToken('reception1@mediflow.test'), TOMORROW, TAG)
+  if (DAY) await cancelTagged(await apiToken('reception1@mediflow.test'), DAY, TAG)
 })
 
 test('doctor opens a checked-in patient, sees the history and gets a cited answer', async ({ browser }) => {
-  // Front desk: book Prakash Hegde with Dr. Khan for tomorrow and check him in.
+  // Front desk: book Prakash Hegde with Dr. Khan on his next working day and check him in.
   const desk = await apiToken('reception1@mediflow.test')
-  const day = await api<{ slots: { starts_at: string }[] }>(desk, `/doctors/${DR_KHAN}/slots?date=${TOMORROW}`)
-  expect(day.slots.length).toBeGreaterThan(0)
+  const day = await nextOpenDay(desk, DR_KHAN)
+  DAY = day.date
   const booked = await api<{ id: string }>(desk, '/appointments', {
     method: 'POST',
     body: JSON.stringify({

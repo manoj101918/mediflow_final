@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { SourceBadge, StatusBadge } from '@/components/appointments/Badges'
 import { RowActions } from '@/components/appointments/RowActions'
+import { LabCountsBadge } from '@/components/labs/LabBadges'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -14,7 +15,7 @@ import {
 import { isLive } from '@/lib/appointments'
 import { formatDate, formatPatientMeta, formatPhone, formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { Appointment } from '@/types/api'
+import type { Appointment, LabStatusCounts } from '@/types/api'
 
 interface AppointmentTableProps {
   appointments: Appointment[]
@@ -24,6 +25,8 @@ interface AppointmentTableProps {
   showDate?: boolean
   /** Hide the actions column (read-only views). */
   readOnly?: boolean
+  /** Lab test counts per appointment (statuses only, never values). */
+  labCounts?: Map<string, LabStatusCounts>
 }
 
 export function AppointmentTable({
@@ -32,6 +35,7 @@ export function AppointmentTable({
   empty,
   showDate,
   readOnly,
+  labCounts,
 }: AppointmentTableProps) {
   const columns = 7 + (showDate ? 1 : 0) + (readOnly ? 0 : 1)
 
@@ -95,7 +99,10 @@ export function AppointmentTable({
                   <SourceBadge source={a.source} />
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={a.status} />
+                  <div className="flex flex-wrap items-center gap-1">
+                    <StatusBadge status={a.status} />
+                    <LabCountsBadge counts={labCounts?.get(a.id)} />
+                  </div>
                 </TableCell>
                 {!readOnly && (
                   <TableCell className="text-right">

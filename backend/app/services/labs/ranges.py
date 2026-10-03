@@ -1,9 +1,10 @@
 """Reference range selection and result flagging (pure functions).
 
 The range for a result is chosen by the patient's sex and age at sample collection:
-a sex-specific range beats an 'any' range, an age-banded range beats an open one, and among
-age bands the narrowest wins. Critical limits are inclusive (value <= critical_low or
-value >= critical_high); normal limits are inclusive too (low <= value <= high).
+an age-banded range that fits beats an open one (a child's band wins over adult ranges),
+then a sex-specific range beats an 'any' range, and among age bands the narrowest wins.
+Critical limits are inclusive (value <= critical_low or value >= critical_high); normal
+limits are inclusive too (low <= value <= high).
 """
 
 from collections.abc import Sequence
@@ -74,8 +75,8 @@ def select_range[R: RangeLike](
             if r.age_max_years is not None and age > r.age_max_years:
                 continue
         width = (r.age_max_years if r.age_max_years is not None else 150) - (r.age_min_years or 0)
-        # Higher is better: sex-specific, then age-banded, then narrower band.
-        score = (int(r.sex != LabRangeSex.ANY), int(banded), -width)
+        # Higher is better: age-banded, then sex-specific, then narrower band.
+        score = (int(banded), int(r.sex != LabRangeSex.ANY), -width)
         if best is None or score > best[0]:
             best = (score, r)
     return best[1] if best else None

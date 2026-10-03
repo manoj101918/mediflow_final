@@ -9,6 +9,7 @@ import { useNewAppointment } from '@/components/appointments/newAppointmentConte
 import { ReportsTab } from '@/components/chart/ReportsTab'
 import { PatientForm } from '@/components/patients/PatientForm'
 import { Button } from '@/components/ui/button'
+import { PatientLabOrders } from '@/components/labs/PatientLabOrders'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -104,6 +105,15 @@ export function PatientDetailPage() {
               <p className="whitespace-pre-wrap">{p.notes}</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Lab orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PatientLabOrders patientId={p.id} />
         </CardContent>
       </Card>
 

@@ -1,20 +1,29 @@
 import { expect, test } from '@playwright/test'
 
-import { apiToken, cancelTagged, clinicDate, newSignedInPage, signIn } from './helpers.ts'
+import { apiToken, cancelTagged, newSignedInPage, nextOpenDay, signIn } from './helpers.ts'
 
-// Bookings are made for tomorrow so they never disturb today's live queue, and every
-// booking a test makes is cancelled afterwards (cancel, never delete: tokens are not reused).
-const TOMORROW = clinicDate(1)
+// Bookings are made from tomorrow on (the next day Dr. Khan works) so they never disturb
+// today's live queue, and every booking a test makes is cancelled afterwards (cancel, never
+// delete: tokens are not reused).
+const DR_KHAN = 'd0c00000-0000-4000-8000-000000000003'
 const TAG = `E2E ${Date.now()}`
+let DAY = ''
+let OFFSET = 1
+
+test.beforeAll(async () => {
+  const open = await nextOpenDay(await apiToken('reception1@mediflow.test'), DR_KHAN)
+  DAY = open.date
+  OFFSET = open.offset
+})
 
 test.afterAll(async () => {
-  await cancelTagged(await apiToken('reception1@mediflow.test'), TOMORROW, TAG)
+  if (DAY) await cancelTagged(await apiToken('reception1@mediflow.test'), DAY, TAG)
 })
 
 test('receptionist books an appointment and another receptionist sees it live', async ({ browser }) => {
-  // Receptionist B watches tomorrow's appointments (subscribed to Realtime).
+  // Receptionist B watches that day's appointments (subscribed to Realtime).
   const watcher = await newSignedInPage(browser, 'reception2@mediflow.test', '/reception')
-  await watcher.goto(`/reception/appointments?from=${TOMORROW}&to=${TOMORROW}`)
+  await watcher.goto(`/reception/appointments?from=${DAY}&to=${DAY}`)
   await expect(watcher.getByRole('heading', { name: 'Appointments' })).toBeVisible()
   await expect(watcher.locator('tbody tr').first()).toBeVisible()
   const watchedRow = watcher.locator('tbody tr', { hasText: TAG })
@@ -27,7 +36,7 @@ test('receptionist books an appointment and another receptionist sees it live', 
   await sheet.getByLabel('Search patients').fill('Prakash')
   await sheet.getByRole('button', { name: /Prakash Hegde/ }).click()
   await sheet.getByRole('button', { name: /Dr\. Imran Khan/ }).click()
-  await sheet.getByRole('button', { name: 'Next day' }).click()
+  for (let i = 0; i < OFFSET; i++) await sheet.getByRole('button', { name: 'Next day' }).click()
   const slots = sheet.getByRole('radio')
   await expect(slots.first()).toBeVisible()
   await slots.last().click()
@@ -39,7 +48,7 @@ test('receptionist books an appointment and another receptionist sees it live', 
   await expect(sheet).toBeHidden()
 
   // The booking shows on A's appointment list…
-  await desk.goto(`/reception/appointments?from=${TOMORROW}&to=${TOMORROW}`)
+  await desk.goto(`/reception/appointments?from=${DAY}&to=${DAY}`)
   await expect(desk.locator('tbody tr', { hasText: TAG })).toContainText('Scheduled')
 
   // …and on B's screen without a reload, with a toast.

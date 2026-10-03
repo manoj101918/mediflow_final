@@ -235,14 +235,14 @@ async def _reject(
 
 
 @dataclass(frozen=True)
-class _Computed:
+class ComputedValue:
     parameter: LabTestParameter
     numeric: Decimal | None
     text: str | None
     reference: LabReferenceRange | None
 
 
-def _parse(parameter: LabTestParameter, raw: str | float) -> tuple[Decimal | None, str | None]:
+def parse_value(parameter: LabTestParameter, raw: str | float) -> tuple[Decimal | None, str | None]:
     if parameter.value_type == LabValueType.NUMERIC:
         try:
             number = Decimal(str(raw).strip())
@@ -291,7 +291,7 @@ async def _ranges_by_parameter(
     return out
 
 
-def _snapshot(result: LabResult, c: _Computed) -> None:
+def snapshot_result(result: LabResult, c: ComputedValue) -> None:
     """Copy name, unit and the range used onto the result; compute its flag."""
     p, r = c.parameter, c.reference
     result.parameter_code = p.code
@@ -318,7 +318,7 @@ async def _compute(
     item: LabOrderItem,
     values: Sequence[ResultValue],
     settings: ClinicLabSettings,
-) -> BookingResult[list[tuple[LabTestParameter, _Computed | None]]]:
+) -> BookingResult[list[tuple[LabTestParameter, ComputedValue | None]]]:
     parameters = {
         p.id: p
         for p in (
@@ -333,28 +333,28 @@ async def _compute(
         return failure(BookingErrorCode.VALIDATION, "Unknown parameter for this test.")
     patient, age = await patient_age_sex(session, order, item, settings)
     ranges = await _ranges_by_parameter(session, [v.parameter_id for v in values])
-    computed: list[tuple[LabTestParameter, _Computed | None]] = []
+    computed: list[tuple[LabTestParameter, ComputedValue | None]] = []
     for v in values:
         parameter = parameters[v.parameter_id]
         if v.value is None or (isinstance(v.value, str) and not v.value.strip()):
             computed.append((parameter, None))
             continue
         try:
-            numeric, text = _parse(parameter, v.value)
+            numeric, text = parse_value(parameter, v.value)
         except ValueError as exc:
             return failure(BookingErrorCode.VALIDATION, str(exc))
         reference = select_range(ranges.get(parameter.id, []), patient.gender, age)
-        computed.append((parameter, _Computed(parameter, numeric, text, reference)))
+        computed.append((parameter, ComputedValue(parameter, numeric, text, reference)))
     return success(computed)
 
 
-def _critical_names(computed: Sequence[tuple[LabTestParameter, _Computed | None]]) -> list[str]:
+def _critical_names(computed: Sequence[tuple[LabTestParameter, ComputedValue | None]]) -> list[str]:
     names = []
     for parameter, c in computed:
         if c is None or c.numeric is None:
             continue
         probe = LabResult()
-        _snapshot(probe, c)
+        snapshot_result(probe, c)
         if probe.flag in CRITICAL_FLAGS:
             names.append(parameter.name)
     return names
@@ -420,7 +420,7 @@ async def _save(
         if current is None:
             current = LabResult(order_item_id=item.id, parameter_id=parameter.id)
             session.add(current)
-        _snapshot(current, c)
+        snapshot_result(current, c)
         current.entered_by = actor.user_id
         current.entered_at = utcnow()
     add_event(session, order, "results_saved", actor.user_id, item=item)
@@ -716,7 +716,7 @@ async def _amend(
             entered_by=actor.user_id,
             entered_at=utcnow(),
         )
-        _snapshot(result, c)
+        snapshot_result(result, c)
         session.add(result)
     await session.flush()
     add_event(session, order, "amended", actor.user_id, item=item)

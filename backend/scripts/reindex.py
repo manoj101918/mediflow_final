@@ -40,7 +40,11 @@ _SOURCES = text(
           select 1 from public.lab_order_items i where i.order_id = o.id and i.status = 'released'
         )
     ) s
-    where cast(:patient as uuid) is null or s.patient_id = cast(:patient as uuid)
+    where (cast(:patient as uuid) is null or s.patient_id = cast(:patient as uuid))
+      -- Never pytest's throwaway clinics (tests share this database; see the worker).
+      and not exists (
+        select 1 from public.clinics c where c.id = s.clinic_id and c.name like 'pytest-clinic-%'
+      )
     """
 )
 

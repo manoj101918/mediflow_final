@@ -45,7 +45,7 @@ OLD_MALE = R(sex=LabRangeSex.MALE, age_min_years=60, low=D(12.5), high=D(16))
         (Gender.MALE, 40, MALE),
         (Gender.FEMALE, 40, FEMALE),
         (Gender.MALE, 70, OLD_MALE),  # sex + age band beats sex only
-        (Gender.MALE, 8, MALE),  # sex-specific beats an any-sex child band
+        (Gender.MALE, 8, CHILD),  # a child's age band beats adult sex-specific ranges
         (Gender.OTHER, 8, CHILD),
         (Gender.OTHER, 40, ANY),
         (None, None, ANY),  # unknown age: banded ranges don't apply

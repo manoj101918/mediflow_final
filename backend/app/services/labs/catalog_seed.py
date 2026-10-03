@@ -38,10 +38,20 @@ def r(
     critical_low: float | None = None,
     critical_high: float | None = None,
     sex: LabRangeSex = LabRangeSex.ANY,
+    ages: tuple[int, int] | None = None,
 ) -> RangeSpec:
     return RangeSpec(
-        sex=sex, low=low, high=high, critical_low=critical_low, critical_high=critical_high
+        sex=sex,
+        low=low,
+        high=high,
+        critical_low=critical_low,
+        critical_high=critical_high,
+        age_min_years=ages[0] if ages else None,
+        age_max_years=ages[1] if ages else None,
     )
+
+
+CHILD = (1, 12)
 
 
 def num(
@@ -105,9 +115,17 @@ CATALOG: tuple[LabTestSpec, ...] = (
             "g/dL",
             r(13.0, 17.0, 7.0, 20.0, M),
             r(12.0, 15.0, 7.0, 20.0, F),
+            r(11.5, 15.5, 7.0, 20.0, ages=CHILD),
             delta=20,
         ),
-        num("TLC", "Total leucocyte count", "x10^3/uL", r(4.0, 11.0, 2.0, 30.0), delta=50),
+        num(
+            "TLC",
+            "Total leucocyte count",
+            "x10^3/uL",
+            r(4.0, 11.0, 2.0, 30.0),
+            r(4.5, 13.5, 2.0, 30.0, ages=CHILD),
+            delta=50,
+        ),
         num("NEUT", "Neutrophils", "%", r(40, 75), decimals=0),
         num("LYMPH", "Lymphocytes", "%", r(20, 45), decimals=0),
         num("MONO", "Monocytes", "%", r(2, 10), decimals=0),
@@ -118,7 +136,15 @@ CATALOG: tuple[LabTestSpec, ...] = (
         num("MCV", "MCV", "fL", r(83, 101)),
         num("MCH", "MCH", "pg", r(27, 32)),
         num("MCHC", "MCHC", "g/dL", r(31.5, 34.5)),
-        num("PLT", "Platelet count", "x10^3/uL", r(150, 410, 20, 1000), decimals=0, delta=50),
+        num(
+            "PLT",
+            "Platelet count",
+            "x10^3/uL",
+            r(150, 410, 20, 1000),
+            r(150, 450, 20, 1000, ages=CHILD),
+            decimals=0,
+            delta=50,
+        ),
     ),
     test(
         "ESR",

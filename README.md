@@ -2,9 +2,10 @@
 
 Clinic management for an Indian outpatient clinic: the front desk books and runs the day's
 appointments, doctors see their own queue and open a patient's chart (history,
-prescriptions, reports) with an assistant that answers questions from that patient's records
-only, an admin manages staff, doctors, hours and leave, and WhatsApp / voice bots can book
-through an API. Everyone signs in on the same login page and lands on their own role's
+prescriptions, reports, lab results) with an assistant that answers questions from that
+patient's records only, the clinic's own lab works through doctors' test orders and releases
+results straight into the chart, an admin manages staff, doctors, hours, leave and the lab test
+catalog, and WhatsApp / voice bots can book through an API. Everyone signs in on the same login page and lands on their own role's
 screens.
 
 - **Backend:** FastAPI (Python 3.12, async SQLAlchemy + asyncpg) on Supabase Postgres
@@ -17,9 +18,10 @@ screens.
 
 | Role | Screens |
 |---|---|
-| Receptionist | **Today**: summary cards, live appointment table with one-click next step (check in → start → complete), no-show / cancel / reschedule, *Upload report*, bot bookings to approve, bot requests to handle. **New appointment** (key `N`): find or add the patient (duplicate warning), pick a doctor and a free slot or squeeze in, confirm. **Appointments** (any date range, filters), **Patients** (typo-tolerant search, history, edit, upload reports and see their status, never their contents or any clinical notes), **Doctors** (hours and leave). |
-| Doctor | Today's own queue: who is with them, who is waiting (token order, *Call next*), later today, finished. Arrivals appear instantly. **Patient chart** (from the queue): demographics, red allergy badges, chronic conditions; **Current visit** (notes, vitals, prescription builder with *Repeat last*, attach report, autosave, *Complete*); **Visit history** across all doctors with addenda; **Medications** (current ones highlighted); **Reports** (upload, inline viewer, indexing status, Retry); **Vitals trend**; and **Ask about this patient**, a chat that answers only from the patient's records with clickable citations. Doctors never see phone numbers. |
-| Admin | **Staff** accounts (create with generated password, link a doctor login, deactivate). **Doctors**: profile, active flag, weekly multi-shift hours, leave days. |
+| Receptionist | **Today**: summary cards, live appointment table with one-click next step (check in → start → complete) and lab test counts per patient ("2 tests pending" / "Results ready", never values), no-show / cancel / reschedule, *Upload report*, bot bookings to approve, bot requests to handle. **New appointment** (key `N`): find or add the patient (duplicate warning), pick a doctor and a free slot or squeeze in, confirm. **Appointments** (any date range, filters), **Patients** (typo-tolerant search, history, edit, lab orders with test statuses, upload reports and see their status, never their contents, result values or any clinical notes), **Doctors** (hours and leave). |
+| Doctor | Today's own queue: who is with them, who is waiting (token order, *Call next*), later today, finished. Arrivals appear instantly. **Patient chart** (from the queue): demographics, red allergy badges, chronic conditions; **Current visit** (notes, vitals, prescription builder with *Repeat last*, **Lab tests** to order with priority and a note for the lab, attach report, autosave, *Complete*); **Visit history** across all doctors with addenda and the lab results of each visit; **Lab results** (flagged values, amendments, PDF); **Lab trends** (a parameter over time with its reference band); **Medications** (current ones highlighted); **Reports** (upload, inline viewer, indexing status, Retry); **Vitals trend**; and **Ask about this patient**, a chat that answers only from the patient's records with clickable citations. Today shows lab badges per patient and a **Lab results** inbox (*Mark reviewed*); a red banner on every doctor screen shows critical values until acknowledged. Doctors never see phone numbers. |
+| Lab technician / supervisor | **Lab worklist** (to collect, in progress, awaiting verification, released today, rejected; STAT and urgent on top; live). **Order**: identity check, sample collection into tubes, printable barcode labels, sample rejection and recollection, result entry with the patient's reference ranges, live flags, critical confirmation and a delta check against the previous value, attach the lab machine's PDF. Technicians submit; supervisors verify and release, send back, or amend released results. Lab staff see only what testing needs. |
+| Admin | **Staff** accounts (create with generated password, link a doctor login, deactivate). **Doctors**: profile, active flag, weekly multi-shift hours, leave days. **Lab tests**: the test catalog (parameters, units, reference ranges by sex and age, critical limits, activate) and the *Require verification before release* setting. Staff roles include the two lab roles. |
 | Bots | `POST /api/bookings/inbound` (see [Bot booking API](#bot-booking-api)). |
 
 ## Architecture
@@ -112,7 +114,10 @@ The schema lives in `supabase/migrations/` and was applied with the Supabase MCP
    profiles and lab PDFs for 5 seed patients) and index it for the assistant:
    `uv run python -m scripts.seed_clinical` (needs `VOYAGE_API_KEY`; with
    `RAG_FAKE_LLM=true` it indexes with fake embeddings instead). Idempotent.
-4. In the dashboard: **Authentication → Sign In / Providers → turn off "Allow new users to
+4. Add the lab: test catalog, structured results matching the seed lab PDFs, a few open orders
+   for the lab worklist and one unacknowledged critical value, then index the results:
+   `uv run python -m scripts.seed_lab && uv run python -m scripts.reindex --all`. Idempotent.
+5. In the dashboard: **Authentication → Sign In / Providers → turn off "Allow new users to
    sign up"** (staff accounts are created by the admin). Optionally enable
    [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
    (may require a paid plan).
@@ -177,6 +182,8 @@ Password for all: `Clinic@12345`
 | Admin | `admin@mediflow.test` |
 | Receptionist | `reception1@mediflow.test`, `reception2@mediflow.test` |
 | Doctor | `dr.sharma@mediflow.test`, `dr.iyer@mediflow.test`, `dr.khan@mediflow.test` |
+| Lab technician | `lab1@mediflow.test` |
+| Lab supervisor | `labhead@mediflow.test` |
 
 ## Testing
 
@@ -193,7 +200,7 @@ npm run lint && npm run typecheck && npm run build
 npm run e2e        # Playwright; starts the dev servers if they are not running
 ```
 
-- **Backend tests (196)** run against `TEST_DATABASE_URL`. Each test creates its own clinic,
+- **Backend tests (291)** run against `TEST_DATABASE_URL`. Each test creates its own clinic,
   staff and patients and deletes them afterwards, so seed data is never touched. No test
   calls a paid API: models are replaced by LangChain fakes. They cover:
   - slot generation, conflicts and concurrent bookings (exactly one wins), token sequencing
@@ -207,13 +214,21 @@ npm run e2e        # Playwright; starts the dev servers if they are not running
   - patient isolation: two near-identical patients, zero cross-patient chunks on every
     retrieval path; chat SSE order, citations, persistence, rate limit, provider errors;
     prompt injection from an uploaded report
-- **Live evaluation** (`tests/live`, deselected by default): 15 questions with expected facts
+  - the lab: every status transition per role with verification on and off, cancellation
+    rules, reference range selection by sex and age, flags and critical confirmation,
+    snapshots that survive catalog edits, amendments as new versions, atomic release (report
+    row, ingestion job and critical alert together), concurrent order numbers, the generated
+    PDF, `lab_result` chunks and citations, lab and reception access, lab RLS and Realtime
+- **Live evaluation** (`tests/live`, deselected by default): 20 questions (5 about lab results) with expected facts
   over the seeded test patient (each answer must contain the facts and a valid citation)
   and 3 questions the records cannot answer (the answer must say so). Prints a scorecard.
   Paced for the Groq free tier.
 - **E2E tests** run against the dev servers and the seeded clinic: a booking made by one
   receptionist appears live on another's screen, each role stays on its own screens, and a
-  doctor opens a checked-in patient, sees the history and gets a cited answer.
+  doctor opens a checked-in patient, sees the history and gets a cited answer, and the lab
+  flow end to end (order → collect → enter with one high value → verify → results inbox,
+  flagged value, PDF and a cited answer). The lab test uses its own patient,
+  "E2E Lab Patient", and books from tomorrow on.
   - They book *tomorrow* and cancel what they created.
   - The chart test needs the clinical seed and the API in `RAG_FAKE_LLM=true` mode (Playwright
     starts it that way; an API that is already running is reused as is).
@@ -320,6 +335,44 @@ with token counts and latency; prompts, answers and record text are never writte
 Models are created in one place (`app/services/rag/providers.py`), so the provider can be
 swapped. `RAG_FAKE_LLM=true` replaces both with deterministic fakes.
 
+## In-house lab
+
+**Workflow.** A doctor orders tests during their own consultation (patient checked in or in
+consultation). The order appears on the lab worklist instantly. The lab collects samples:
+tests sharing a sample type and container go into one tube with a printed code
+(`S-261002-0042`). Results are entered per parameter. The server picks the reference range
+for the patient's sex and age at collection (an age band beats an adult range; a sex-specific
+range beats an "any" range), copies it onto the result (so catalog edits never change old
+results) and flags the value (low, high, critical low/high, abnormal for text). Critical
+values need an explicit confirmation.
+
+```
+ ordered ─▶ sample_collected ─▶ result_entered ─▶ verified ─▶ released
+    │            │    ▲              │   (supervisor)          ▲
+    ▼            ▼    │ recollect    └─ verification off ──────┘
+ cancelled   sample_rejected         └─ sent back ─▶ sample_collected
+```
+
+**Release** (one transaction): item statuses and timestamps, a critical alert per critical
+value for the ordering doctor, the order's generated report row, the ingestion job and a
+`lab_report_released` event (the hook for notifying patients later). The order status is
+derived from its items, so tests are released one by one as they're ready.
+
+**After release** the ingestion worker indexes one `lab_result` chunk per test (date, order,
+values, ranges and flags), renders the clinic's PDF report (fpdf2) into the private bucket
+and marks the order's reports indexed. The PDF is for viewing; its text is not embedded,
+since the structured results already are. Amendments create a new result version with a
+reason; the old one stays in history; the PDF is regenerated as "Amended" and re-indexed.
+
+**Realtime:** only `lab_orders` (doctors and lab staff) and `lab_critical_alerts` (the doctor
+they belong to) are published. Result values never go through Realtime; screens refetch them
+from the API. Reception gets status counts from the API (polled), because the order row
+carries the doctor's note for the lab.
+
+**Reference ranges in the starter catalog are common adult intervals** (plus paediatric CBC
+bands for ages 1 to 12). Labs differ by method and analyser: the clinic must review every
+range and critical limit under **Admin → Lab tests** before use.
+
 ## Decisions and assumptions
 
 - **Time:** weekday `0` = Monday (Python `weekday()`). `appointment_date` holds the clinic-local
@@ -360,6 +413,20 @@ swapped. `RAG_FAKE_LLM=true` replaces both with deterministic fakes.
 - **Reports:** PDF, JPEG or PNG up to 10 MB, checked from the file's bytes; stored in a private
   bucket and shown through 60-second signed links. Uploaded reports are never edited or
   deleted.
+- **Lab roles:** a technician enters and submits results; a supervisor verifies and releases
+  them (and can do every lab step). With *Require verification before release* turned off,
+  whoever enters results can release them.
+- **Lab access:** lab staff see what testing needs: name, age, sex and phone, the order and
+  the doctor's note for the lab, and the patient's earlier results of the same parameters
+  (for delta checks). Notes, prescriptions, other reports and the assistant are 403.
+  Reception and admin see order numbers, test names and statuses, never values.
+- **Ordering** is only possible during the doctor's own consultation. A test can be cancelled
+  until its sample is collected (by the ordering doctor, or by the lab with a reason).
+- **Lab values** are stored at each parameter's reporting precision (e.g. HbA1c to 0.1).
+  Released results are never overwritten; a database trigger enforces it.
+- **Lab seed data:** the seed lab PDFs were backfilled as structured results on the same
+  dates; each PDF is linked to its order as the lab machine's PDF and is no longer indexed on
+  its own, so the assistant sees every value once.
 - **Assistant:** Groq free-tier model and Voyage embeddings (see the RAG section). Chat
   conversations belong to the doctor who started them.
 
@@ -377,6 +444,9 @@ swapped. `RAG_FAKE_LLM=true` replaces both with deterministic fakes.
   rate-limited, the question is answered from full-text search alone. Adding a payment method
   in the Voyage dashboard (the free token allowance still applies) lifts the limit; then set
   `EMBEDDING_REQUESTS_PER_MINUTE=0` or a higher value.
+- Lab: no billing, no external reference labs, no analyser (LIS/HL7/ASTM) interface, no
+  walk-in tests without a doctor's order, and no sending of reports to patients yet (the
+  `lab_report_released` event is the hook). Tube labels print through the browser.
 - Printing, e-prescriptions, ABDM/ABHA, drug interaction checks and a patient-facing
   assistant are out of scope.
 - "Bot requests to handle" polls every 30 seconds (those rows are not in the Realtime

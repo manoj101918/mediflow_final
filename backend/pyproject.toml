@@ -30,6 +30,12 @@ dependencies = [
 [tool.uv]
 package = false
 python-preference = "only-system"
+# Smart App Control blocks SQLAlchemy's compiled (Cython) modules on this machine: build it
+# from source without them (pure Python; same behaviour, slightly slower).
+no-binary-package = ["sqlalchemy"]
+
+[tool.uv.extra-build-variables]
+sqlalchemy = { DISABLE_SQLALCHEMY_CEXT = "1" }
 
 [tool.ruff]
 line-length = 100

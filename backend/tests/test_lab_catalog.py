@@ -130,7 +130,12 @@ async def test_starter_catalog_is_idempotent(client: AsyncClient, clinic: Clinic
     admin = await clinic.staff(UserRole.ADMIN)
     listed = (await client.get("/api/admin/lab-tests", headers=auth(admin.user_id))).json()
     hb = next(p for t in listed if t["code"] == "CBC" for p in t["parameters"] if p["code"] == "HB")
-    assert {r["sex"] for r in hb["ranges"]} == {"male", "female"}
+    # Adult ranges by sex plus a paediatric band (ages 1-12, any sex).
+    assert sorted((r["sex"], r["age_max_years"]) for r in hb["ranges"]) == [
+        ("any", 12),
+        ("female", None),
+        ("male", None),
+    ]
 
 
 async def test_verification_setting(client: AsyncClient, clinic: ClinicFixture) -> None:
