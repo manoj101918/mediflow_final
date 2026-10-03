@@ -164,6 +164,352 @@ export type Database = {
           },
         ]
       }
+      bot_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          id: string
+          kind: string
+          message_id: string | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          message_id?: string | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_alerts_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_alerts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_alerts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "bot_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_alerts_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "channel_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_conversations: {
+        Row: {
+          assigned_to: string | null
+          attempt_counter: number
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          created_at: string
+          draft: Json
+          failed_parse_count: number
+          handoff_at: string | null
+          handoff_reason: string | null
+          handoff_status: Database["public"]["Enums"]["bot_handoff_status"]
+          id: string
+          language: string | null
+          last_inbound_at: string | null
+          last_message_ts: string | null
+          phone_e164: string
+          selected_patient_id: string | null
+          state: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          assigned_to?: string | null
+          attempt_counter?: number
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          created_at?: string
+          draft?: Json
+          failed_parse_count?: number
+          handoff_at?: string | null
+          handoff_reason?: string | null
+          handoff_status?: Database["public"]["Enums"]["bot_handoff_status"]
+          id?: string
+          language?: string | null
+          last_inbound_at?: string | null
+          last_message_ts?: string | null
+          phone_e164: string
+          selected_patient_id?: string | null
+          state?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          assigned_to?: string | null
+          attempt_counter?: number
+          channel?: Database["public"]["Enums"]["bot_channel"]
+          clinic_id?: string
+          created_at?: string
+          draft?: Json
+          failed_parse_count?: number
+          handoff_at?: string | null
+          handoff_reason?: string | null
+          handoff_status?: Database["public"]["Enums"]["bot_handoff_status"]
+          id?: string
+          language?: string | null
+          last_inbound_at?: string | null
+          last_message_ts?: string | null
+          phone_e164?: string
+          selected_patient_id?: string | null
+          state?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_conversations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_conversations_selected_patient_id_fkey"
+            columns: ["selected_patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_jobs: {
+        Row: {
+          attempts: number
+          clinic_id: string
+          created_at: string
+          id: string
+          kind: string
+          last_error: string | null
+          payload: Json
+          ref_id: string | null
+          run_after: string
+          status: Database["public"]["Enums"]["job_status"]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          clinic_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          last_error?: string | null
+          payload?: Json
+          ref_id?: string | null
+          run_after?: string
+          status?: Database["public"]["Enums"]["job_status"]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          ref_id?: string | null
+          run_after?: string
+          status?: Database["public"]["Enums"]["job_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_jobs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_keyword_lists: {
+        Row: {
+          clinic_id: string
+          kind: string
+          language: string
+          updated_at: string
+          updated_by: string | null
+          words: string[]
+        }
+        Insert: {
+          clinic_id: string
+          kind: string
+          language: string
+          updated_at?: string
+          updated_by?: string | null
+          words?: string[]
+        }
+        Update: {
+          clinic_id?: string
+          kind?: string
+          language?: string
+          updated_at?: string
+          updated_by?: string | null
+          words?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_keyword_lists_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_keyword_lists_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_usage_monthly: {
+        Row: {
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          month: string
+          sent_count: number
+          updated_at: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          month: string
+          sent_count?: number
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["bot_channel"]
+          clinic_id?: string
+          month?: string
+          sent_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_usage_monthly_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      channel_messages: {
+        Row: {
+          body_text: string | null
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          conversation_id: string | null
+          created_at: string
+          direction: Database["public"]["Enums"]["message_direction"]
+          error: string | null
+          id: string
+          message_ts: string
+          payload: Json
+          phone_e164: string
+          status: Database["public"]["Enums"]["channel_message_status"]
+          transcript: string | null
+          type: string
+          updated_at: string
+          wamid: string | null
+        }
+        Insert: {
+          body_text?: string | null
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          conversation_id?: string | null
+          created_at?: string
+          direction: Database["public"]["Enums"]["message_direction"]
+          error?: string | null
+          id?: string
+          message_ts?: string
+          payload?: Json
+          phone_e164: string
+          status: Database["public"]["Enums"]["channel_message_status"]
+          transcript?: string | null
+          type: string
+          updated_at?: string
+          wamid?: string | null
+        }
+        Update: {
+          body_text?: string | null
+          channel?: Database["public"]["Enums"]["bot_channel"]
+          clinic_id?: string
+          conversation_id?: string | null
+          created_at?: string
+          direction?: Database["public"]["Enums"]["message_direction"]
+          error?: string | null
+          id?: string
+          message_ts?: string
+          payload?: Json
+          phone_e164?: string
+          status?: Database["public"]["Enums"]["channel_message_status"]
+          transcript?: string | null
+          type?: string
+          updated_at?: string
+          wamid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "bot_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinics: {
         Row: {
           address: string | null
@@ -193,6 +539,57 @@ export type Database = {
           timezone?: string
         }
         Relationships: []
+      }
+      consent_events: {
+        Row: {
+          action: string
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          created_at: string
+          evidence: string | null
+          id: number
+          notice_version: string
+          patient_id: string | null
+          phone_e164: string
+        }
+        Insert: {
+          action: string
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          created_at?: string
+          evidence?: string | null
+          id?: never
+          notice_version: string
+          patient_id?: string | null
+          phone_e164: string
+        }
+        Update: {
+          action?: string
+          channel?: Database["public"]["Enums"]["bot_channel"]
+          clinic_id?: string
+          created_at?: string
+          evidence?: string | null
+          id?: never
+          notice_version?: string
+          patient_id?: string | null
+          phone_e164?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consent_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consent_events_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       consultation_addenda: {
         Row: {
@@ -341,6 +738,47 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_preferences: {
+        Row: {
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          id: string
+          opted_in_at: string | null
+          opted_in_source: string | null
+          opted_out_at: string | null
+          phone_e164: string
+          updated_at: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          id?: string
+          opted_in_at?: string | null
+          opted_in_source?: string | null
+          opted_out_at?: string | null
+          phone_e164: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["bot_channel"]
+          clinic_id?: string
+          id?: string
+          opted_in_at?: string | null
+          opted_in_source?: string | null
+          opted_out_at?: string | null
+          phone_e164?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_preferences_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
         ]
@@ -1303,6 +1741,91 @@ export type Database = {
           },
         ]
       }
+      message_outbox: {
+        Row: {
+          appointment_id: string | null
+          attempts: number
+          blocked_reason: string | null
+          body: Json
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          conversation_id: string
+          created_at: string
+          essential: boolean
+          id: string
+          idempotency_key: string
+          kind: string
+          last_error: string | null
+          phone_e164: string
+          sent_at: string | null
+          status: Database["public"]["Enums"]["outbox_status"]
+          updated_at: string
+          wamid: string | null
+        }
+        Insert: {
+          appointment_id?: string | null
+          attempts?: number
+          blocked_reason?: string | null
+          body: Json
+          channel: Database["public"]["Enums"]["bot_channel"]
+          clinic_id: string
+          conversation_id: string
+          created_at?: string
+          essential?: boolean
+          id?: string
+          idempotency_key: string
+          kind: string
+          last_error?: string | null
+          phone_e164: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["outbox_status"]
+          updated_at?: string
+          wamid?: string | null
+        }
+        Update: {
+          appointment_id?: string | null
+          attempts?: number
+          blocked_reason?: string | null
+          body?: Json
+          channel?: Database["public"]["Enums"]["bot_channel"]
+          clinic_id?: string
+          conversation_id?: string
+          created_at?: string
+          essential?: boolean
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          last_error?: string | null
+          phone_e164?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["outbox_status"]
+          updated_at?: string
+          wamid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_outbox_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_outbox_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_outbox_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "bot_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_chat_messages: {
         Row: {
           citations: Json
@@ -1960,6 +2483,16 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      bot_channel: "whatsapp" | "web_voice" | "phone"
+      bot_handoff_status: "none" | "open" | "resolved"
+      channel_message_status:
+        | "received"
+        | "processed"
+        | "ignored"
+        | "sent"
+        | "delivered"
+        | "read"
+        | "failed"
       chat_role: "user" | "assistant"
       consultation_status: "draft" | "finalized"
       extraction_method: "text"
@@ -2005,6 +2538,14 @@ export type Database = {
       lab_range_sex: "male" | "female" | "any"
       lab_sample_type: "blood" | "urine" | "stool" | "swab" | "other"
       lab_value_type: "numeric" | "text" | "choice"
+      message_direction: "inbound" | "outbound"
+      outbox_status:
+        | "pending"
+        | "sent"
+        | "delivered"
+        | "read"
+        | "failed"
+        | "blocked"
       record_access_action:
         | "chart_open"
         | "chat_question"
@@ -2162,6 +2703,17 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      bot_channel: ["whatsapp", "web_voice", "phone"],
+      bot_handoff_status: ["none", "open", "resolved"],
+      channel_message_status: [
+        "received",
+        "processed",
+        "ignored",
+        "sent",
+        "delivered",
+        "read",
+        "failed",
+      ],
       chat_role: ["user", "assistant"],
       consultation_status: ["draft", "finalized"],
       extraction_method: ["text"],
@@ -2212,6 +2764,15 @@ export const Constants = {
       lab_range_sex: ["male", "female", "any"],
       lab_sample_type: ["blood", "urine", "stool", "swab", "other"],
       lab_value_type: ["numeric", "text", "choice"],
+      message_direction: ["inbound", "outbound"],
+      outbox_status: [
+        "pending",
+        "sent",
+        "delivered",
+        "read",
+        "failed",
+        "blocked",
+      ],
       record_access_action: [
         "chart_open",
         "chat_question",

@@ -6,8 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Appointment, AppointmentEvent, AppointmentStatus
-from app.services.booking.actor import Actor, StaffActor
+from app.services.booking.actor import Actor, SystemActor
+from app.services.booking.ownership import lock_owned_appointment
 from app.services.booking.results import BookingErrorCode, BookingResult, failure, success
+from app.services.booking.timeutil import utcnow
 
 S = AppointmentStatus
 
@@ -69,8 +71,8 @@ async def transition_in_session(
     For callers that combine a status change with other writes in one transaction (e.g.
     completing an appointment while finalizing its consultation); they commit or roll back.
     """
-    if not isinstance(actor, StaffActor):
-        return failure(BookingErrorCode.FORBIDDEN, "Automated channels cannot change status.")
+    if isinstance(actor, SystemActor):
+        return await _system_cancel(session, appointment_id, target, actor, note=note)
 
     appointment = await session.scalar(
         select(Appointment)
@@ -112,6 +114,40 @@ async def transition_in_session(
             actor_type=actor.actor_type,
             channel=actor.channel,
             note=note,
+        )
+    )
+    await session.flush()
+    return success(appointment)
+
+
+async def _system_cancel(
+    session: AsyncSession,
+    appointment_id: UUID,
+    target: AppointmentStatus,
+    actor: SystemActor,
+    *,
+    note: str | None,
+) -> BookingResult[Appointment]:
+    """Bots may only cancel upcoming appointments of their verified sender's patients."""
+    if target is not S.CANCELLED:
+        return failure(BookingErrorCode.FORBIDDEN, "Automated channels can only cancel.")
+    owned = await lock_owned_appointment(session, appointment_id, actor, utcnow())
+    if not owned.ok:
+        return owned
+    appointment = owned.unwrap()
+    current = appointment.status
+    appointment.status = target
+    await session.flush()
+    session.add(
+        AppointmentEvent(
+            clinic_id=appointment.clinic_id,
+            appointment_id=appointment.id,
+            from_status=current,
+            to_status=target,
+            changed_by=None,
+            actor_type=actor.actor_type,
+            channel=actor.channel,
+            note=note or f"Cancelled by the patient via {actor.channel}.",
         )
     )
     await session.flush()

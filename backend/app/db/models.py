@@ -199,6 +199,42 @@ class RecordAccessAction(enum.StrEnum):
     REPORT_UPLOAD = "report_upload"
 
 
+class BotChannel(enum.StrEnum):
+    WHATSAPP = "whatsapp"
+    WEB_VOICE = "web_voice"
+    PHONE = "phone"
+
+
+class HandoffStatus(enum.StrEnum):
+    NONE = "none"
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class MessageDirection(enum.StrEnum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+
+
+class ChannelMessageStatus(enum.StrEnum):
+    RECEIVED = "received"
+    PROCESSED = "processed"
+    IGNORED = "ignored"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    READ = "read"
+    FAILED = "failed"
+
+
+class OutboxStatus(enum.StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    READ = "read"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+
+
 def vector_literal(values: Sequence[float]) -> str:
     """pgvector's text form: '[0.1,0.2,...]'."""
     return "[" + ",".join(repr(float(x)) for x in values) + "]"
@@ -870,3 +906,199 @@ class LabOrderEvent(Base):
     to_status: Mapped[str | None] = mapped_column(Text)
     actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: booking bot (backend-only tables; see *_phase4_bot_schema.sql)
+# ---------------------------------------------------------------------------
+
+
+class BotConversation(Base):
+    __tablename__ = "bot_conversations"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    channel: Mapped[BotChannel] = mapped_column(_pg_enum(BotChannel, "bot_channel"))
+    phone_e164: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(Text, server_default=text("'new'"))
+    language: Mapped[str | None] = mapped_column(Text)
+    selected_patient_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("patients.id", ondelete="SET NULL")
+    )
+    draft: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    attempt_counter: Mapped[int] = mapped_column(server_default=text("0"))
+    last_inbound_at: Mapped[datetime | None]
+    last_message_ts: Mapped[datetime | None]
+    handoff_status: Mapped[HandoffStatus] = mapped_column(
+        _pg_enum(HandoffStatus, "bot_handoff_status"), server_default=text("'none'")
+    )
+    handoff_reason: Mapped[str | None] = mapped_column(Text)
+    handoff_at: Mapped[datetime | None]
+    assigned_to: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    failed_parse_count: Mapped[int] = mapped_column(server_default=text("0"))
+    version: Mapped[int] = mapped_column(server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class ChannelMessage(Base):
+    __tablename__ = "channel_messages"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("bot_conversations.id", ondelete="CASCADE")
+    )
+    direction: Mapped[MessageDirection] = mapped_column(
+        _pg_enum(MessageDirection, "message_direction")
+    )
+    channel: Mapped[BotChannel] = mapped_column(_pg_enum(BotChannel, "bot_channel"))
+    phone_e164: Mapped[str] = mapped_column(Text)
+    wamid: Mapped[str | None] = mapped_column(Text)
+    type: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    body_text: Mapped[str | None] = mapped_column(Text)
+    transcript: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[ChannelMessageStatus] = mapped_column(
+        _pg_enum(ChannelMessageStatus, "channel_message_status")
+    )
+    error: Mapped[str | None] = mapped_column(Text)
+    message_ts: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class MessageOutbox(Base):
+    __tablename__ = "message_outbox"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    conversation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("bot_conversations.id", ondelete="CASCADE")
+    )
+    appointment_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("appointments.id", ondelete="SET NULL")
+    )
+    channel: Mapped[BotChannel] = mapped_column(_pg_enum(BotChannel, "bot_channel"))
+    phone_e164: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    essential: Mapped[bool] = mapped_column(server_default=text("false"))
+    idempotency_key: Mapped[str] = mapped_column(Text)
+    body: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[OutboxStatus] = mapped_column(
+        _pg_enum(OutboxStatus, "outbox_status"), server_default=text("'pending'")
+    )
+    blocked_reason: Mapped[str | None] = mapped_column(Text)
+    wamid: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(server_default=text("0"))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    sent_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class ContactPreference(Base):
+    __tablename__ = "contact_preferences"
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    phone_e164: Mapped[str] = mapped_column(Text)
+    channel: Mapped[BotChannel] = mapped_column(_pg_enum(BotChannel, "bot_channel"))
+    opted_in_at: Mapped[datetime | None]
+    opted_in_source: Mapped[str | None] = mapped_column(Text)
+    opted_out_at: Mapped[datetime | None]
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class ConsentEvent(Base):
+    __tablename__ = "consent_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    phone_e164: Mapped[str] = mapped_column(Text)
+    patient_id: Mapped[UUID | None] = mapped_column(ForeignKey("patients.id", ondelete="SET NULL"))
+    channel: Mapped[BotChannel] = mapped_column(_pg_enum(BotChannel, "bot_channel"))
+    notice_version: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class BotJob(Base):
+    __tablename__ = "bot_jobs"
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(Text)
+    ref_id: Mapped[UUID | None]
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    status: Mapped[JobStatus] = mapped_column(
+        _pg_enum(JobStatus, "job_status"), server_default=text("'pending'")
+    )
+    attempts: Mapped[int] = mapped_column(server_default=text("0"))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    run_after: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )
+
+
+class BotUsageMonthly(Base):
+    __tablename__ = "bot_usage_monthly"
+
+    clinic_id: Mapped[UUID] = mapped_column(
+        ForeignKey("clinics.id", ondelete="CASCADE"), primary_key=True
+    )
+    channel: Mapped[BotChannel] = mapped_column(
+        _pg_enum(BotChannel, "bot_channel"), primary_key=True
+    )
+    month: Mapped[date] = mapped_column(primary_key=True)
+    sent_count: Mapped[int] = mapped_column(server_default=text("0"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class BotAlert(Base):
+    __tablename__ = "bot_alerts"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[UUID] = _uuid_pk()
+    clinic_id: Mapped[UUID] = mapped_column(ForeignKey("clinics.id", ondelete="CASCADE"))
+    conversation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("bot_conversations.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("channel_messages.id", ondelete="SET NULL")
+    )
+    kind: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    acknowledged_at: Mapped[datetime | None]
+    acknowledged_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+
+
+class BotKeywordList(Base):
+    __tablename__ = "bot_keyword_lists"
+
+    clinic_id: Mapped[UUID] = mapped_column(
+        ForeignKey("clinics.id", ondelete="CASCADE"), primary_key=True
+    )
+    kind: Mapped[str] = mapped_column(Text, primary_key=True)
+    language: Mapped[str] = mapped_column(Text, primary_key=True)
+    words: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    updated_by: Mapped[UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), server_onupdate=FetchedValue()
+    )

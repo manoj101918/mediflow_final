@@ -48,6 +48,9 @@ class StaffActor:
 class SystemActor:
     channel: SystemChannel
     clinic_id: UUID
+    # The verified sender of a bot conversation. Bots may cancel or move only appointments
+    # of patients registered with this phone; without it they can only book.
+    phone_e164: str | None = None
     kind: Literal["system"] = "system"
 
     @property

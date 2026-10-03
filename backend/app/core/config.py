@@ -69,6 +69,39 @@ class Settings(BaseSettings):
     ingestion_max_attempts: int = Field(default=5, ge=1, le=20)
     ingestion_poll_seconds: float = Field(default=2.0, gt=0)
 
+    # WhatsApp Cloud API (direct Meta, no BSP). The bot books into INBOUND_CLINIC_ID.
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_waba_id: str | None = None
+    # Permanent System User token (not the 24 h test token).
+    whatsapp_access_token: SecretStr | None = None
+    whatsapp_app_secret: SecretStr | None = None
+    whatsapp_verify_token: SecretStr | None = None
+    # Graph API version; empty = the PyWa default.
+    whatsapp_api_version: str | None = None
+    # Template messages cost money; when off, nothing is sent outside the 24 h window.
+    whatsapp_allow_paid_templates: bool = False
+    # Record outbound WhatsApp messages instead of calling Meta (tests / E2E).
+    whatsapp_fake: bool = False
+    public_base_url: str | None = None
+
+    # Booking bot
+    bot_worker_enabled: bool = True
+    bot_poll_seconds: float = Field(default=1.0, gt=0)
+    bot_max_attempts: int = Field(default=5, ge=1, le=20)
+    # Meta's free service messages per business number per month (from 2026-10-01).
+    bot_free_reply_limit: int = Field(default=1000, ge=0)
+    # Kept for essential messages (confirmations, emergencies, opt-out, handoff).
+    bot_essential_reserve: int = Field(default=100, ge=0)
+    # Free-text / voice understanding with the Groq LLM (free tier).
+    bot_llm_enabled: bool = False
+    bot_notice_version: str = "2026-10-v1"
+
+    # Speech (voice notes and the voice simulator)
+    stt_provider: Literal["sarvam", "groq", "fake"] = "sarvam"
+    tts_provider: Literal["browser", "sarvam", "fake"] = "browser"
+    sarvam_api_key: SecretStr | None = None
+    stt_max_seconds: int = Field(default=30, ge=1, le=30)
+
     @field_validator("embedding_dim")
     @classmethod
     def _match_vector_column(cls, value: int) -> int:

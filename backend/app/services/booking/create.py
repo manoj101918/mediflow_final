@@ -28,6 +28,7 @@ from app.db.models import (
 from app.services.booking import rules
 from app.services.booking.actor import Actor, StaffActor, SystemActor
 from app.services.booking.dberrors import booking_error_for
+from app.services.booking.ownership import lock_owned_appointment
 from app.services.booking.results import BookingErrorCode, BookingResult, failure, success
 from app.services.booking.timeutil import local_date, utcnow
 from app.services.booking.tokens import lock_doctor_day, next_token
@@ -232,13 +233,19 @@ async def reschedule_appointment(
 ) -> BookingResult[Appointment]:
     """Move an upcoming appointment to a new time with the same doctor.
 
-    Moving to another day assigns a fresh token for that day.
+    Moving to another day assigns a fresh token for that day. A bot may move its sender's
+    own upcoming appointments (never squeezed in); the move goes back to
+    `pending_confirmation` for the front desk to approve again.
     """
+    moment = now or utcnow()
 
-    async def work() -> BookingResult[Appointment]:
-        if not (isinstance(actor, StaffActor) and actor.is_front_desk):
+    async def load() -> BookingResult[Appointment]:
+        if isinstance(actor, SystemActor):
+            if squeeze_in:
+                return failure(BookingErrorCode.FORBIDDEN, "Only the front desk can squeeze in.")
+            return await lock_owned_appointment(session, appointment_id, actor, moment)
+        if not actor.is_front_desk:
             return failure(BookingErrorCode.FORBIDDEN, "Only the front desk can reschedule.")
-
         appointment = await session.scalar(
             select(Appointment)
             .where(Appointment.id == appointment_id, Appointment.clinic_id == actor.clinic_id)
@@ -246,6 +253,13 @@ async def reschedule_appointment(
         )
         if appointment is None:
             return failure(BookingErrorCode.NOT_FOUND, "Appointment not found.")
+        return success(appointment)
+
+    async def work() -> BookingResult[Appointment]:
+        loaded = await load()
+        if not loaded.ok:
+            return loaded
+        appointment = loaded.unwrap()
         if appointment.status not in RESCHEDULABLE:
             return failure(
                 BookingErrorCode.INVALID_TRANSITION,
@@ -256,7 +270,7 @@ async def reschedule_appointment(
             return failure(BookingErrorCode.NOT_FOUND, "Doctor not found.")
 
         planned = await _plan_slot(
-            session, actor.clinic_id, doctor, starts_at, squeeze_in=squeeze_in, now=now or utcnow()
+            session, actor.clinic_id, doctor, starts_at, squeeze_in=squeeze_in, now=moment
         )
         if not planned.ok:
             return failure(planned.code or BookingErrorCode.VALIDATION, planned.message)
@@ -268,13 +282,16 @@ async def reschedule_appointment(
         if slot.day != appointment.appointment_date:
             appointment.token_number = await next_token(session, doctor.id, slot.day)
         previous = appointment.starts_at
+        previous_status = appointment.status
         appointment.starts_at = slot.starts_at
         appointment.ends_at = slot.ends_at
+        if isinstance(actor, SystemActor):
+            appointment.status = AppointmentStatus.PENDING_CONFIRMATION
         await session.flush()
         note = f"Rescheduled from {slot.local(previous)} to {slot.local(slot.starts_at)}."
         if squeeze_in:
             note = f"{note} {SQUEEZE_IN_NOTE}"
-        session.add(_event(appointment, actor, appointment.status, note))
+        session.add(_event(appointment, actor, previous_status, note))
         await session.flush()
         return success(appointment)
 
