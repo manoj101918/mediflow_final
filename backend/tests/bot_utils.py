@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import BotChannel, BotConversation, MessageOutbox
 from app.services.conversation import InboundMsg, TurnResult, run_turn
+from app.services.conversation.intent import Understander
 from app.services.conversation.types import Language
 from tests.conftest import ClinicFixture
 
@@ -25,6 +26,7 @@ class Bot:
     lang_hint: Language | None = None
     last: TurnResult | None = None
     history: list[TurnResult] = field(default_factory=list)
+    understand: Understander | None = None
 
     @property
     def sessionmaker(self) -> async_sessionmaker[AsyncSession]:
@@ -85,6 +87,7 @@ class Bot:
                 notice_version=NOTICE_VERSION,
                 now=now,
                 extras=extras,
+                understand=self.understand,
             )
         self.last = result
         self.history.append(result)

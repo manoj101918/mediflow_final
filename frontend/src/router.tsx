@@ -60,6 +60,10 @@ export const router = createBrowserRouter([
             path: 'doctors',
             lazy: lazyComponent(() => import('@/pages/reception/Doctors').then((m) => m.DoctorsPage)),
           },
+          {
+            path: 'inbox',
+            lazy: lazyComponent(() => import('@/pages/reception/Inbox').then((m) => m.InboxPage)),
+          },
         ],
       ),
       area(
@@ -95,6 +99,14 @@ export const router = createBrowserRouter([
           {
             path: 'lab-tests/:testId',
             lazy: lazyComponent(() => import('@/pages/admin/LabTestManage').then((m) => m.LabTestManagePage)),
+          },
+          {
+            path: 'whatsapp',
+            lazy: lazyComponent(() => import('@/pages/admin/WhatsApp').then((m) => m.WhatsAppPage)),
+          },
+          {
+            path: 'voice-simulator',
+            lazy: lazyComponent(() => import('@/pages/admin/VoiceSimulator').then((m) => m.VoiceSimulatorPage)),
           },
         ],
       ),

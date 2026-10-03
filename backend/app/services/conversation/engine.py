@@ -40,6 +40,7 @@ from app.services.conversation.i18n import (
     t,
     time_label,
 )
+from app.services.conversation.intent import IntentRequest, Understander
 from app.services.conversation.keywords import KeywordSet, is_medical_question, normalize
 from app.services.conversation.options import match_option, options_from_draft, options_to_draft
 from app.services.conversation.types import (
@@ -106,6 +107,8 @@ class TurnContext:
     keywords: KeywordSet
     # The phone opted out (on any channel).
     opted_out: bool = False
+    # Free-text / transcript understanding (rules or the LLM); None = menus only.
+    understand: Understander | None = None
     extras: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -209,6 +212,45 @@ def _show_menu(turn: _Turn, text: str | None = None) -> None:
     _present(turn, MENU, text or t(turn.lang, "menu"), options, buttons=True)
 
 
+async def _fallback(turn: _Turn) -> None:
+    """Unmatched input: try to understand free text / a transcript, else ask again."""
+    if not await _understand(turn):
+        _not_understood(turn)
+
+
+async def _understand(turn: _Turn) -> bool:
+    parser = turn.ctx.understand
+    text = turn.msg.text.strip()
+    if parser is None or turn.msg.kind not in ("text", "voice") or not text:
+        return False
+    doctors = await data.active_doctors(turn.session, turn.ctx.clinic_id)
+    parsed = await parser.parse(
+        IntentRequest(
+            text=text, today=turn.ctx.today, doctors=[d.name for d in doctors], language=turn.lang
+        )
+    )
+    if parsed.intent == "unknown":
+        return False
+    turn.conv = replace(turn.conv, failed_parse_count=0)
+    if parsed.intent == "reception":
+        _handoff(turn, "button")
+    elif parsed.intent in ("my_appointments", "cancel", "reschedule"):
+        await _show_my_appointments(turn)
+    else:
+        hints: dict[str, str] = {}
+        doctor = next((d for d in doctors if d.name == parsed.doctor), None)
+        if doctor is not None:
+            hints["doctor_id"] = str(doctor.id)
+        day = resolve_date(parsed.date_text, turn.ctx.today) if parsed.date_text else None
+        if day is not None:
+            hints["day"] = day.isoformat()
+        at = parse_time(parsed.time_text) if parsed.time_text else None
+        if at is not None:
+            hints["time"] = at.strftime("%H:%M")
+        await _start_booking(turn, hints, parsed.patient_name)
+    return True
+
+
 def _not_understood(turn: _Turn) -> None:
     failed = turn.conv.failed_parse_count + 1
     turn.conv = replace(turn.conv, failed_parse_count=failed)
@@ -280,7 +322,7 @@ async def handle(
         turn.say("unsupported")
         return turn.outcome()
     if msg.kind == "voice" and not text:
-        turn.say("voice_failed")
+        turn.say("voice_too_long" if msg.voice_error == "too_long" else "voice_failed")
         return turn.outcome()
     if text and is_medical_question(text):
         _show_menu(turn, f"{t(turn.lang, 'medical')}\n{t(turn.lang, 'menu')}")
@@ -289,7 +331,8 @@ async def handle(
         _show_menu(turn)
         return turn.outcome()
 
-    choice = match_option(msg, options_from_draft(turn.conv.draft))
+    offered = options_from_draft(turn.conv.draft)
+    choice = match_option(msg, offered) or _yes_no(text, offered)
     if choice is not None and choice.id == MORE:
         _more(turn)
         return turn.outcome()
@@ -297,6 +340,35 @@ async def handle(
         turn.conv = replace(turn.conv, failed_parse_count=0)
     await _STATES.get(turn.conv.state, _on_menu)(turn, choice)
     return turn.outcome()
+
+
+_YES = frozenset(
+    normalize(w)
+    for w in (
+        "yes",
+        "yeah",
+        "ok",
+        "okay",
+        "sure",
+        "confirm",
+        "అవును",
+        "సరే",
+        "हाँ",
+        "हां",
+        "जी हाँ",
+        "ठीक है",
+    )
+)
+_NO = frozenset(normalize(w) for w in ("no", "nope", "వద్దు", "కాదు", "नहीं", "ना"))
+
+
+def _yes_no(text: str, offered: Sequence[Option]) -> Option | None:
+    """Typed or spoken yes/no for confirm questions (voice callers rarely say the title)."""
+    cleaned = normalize(text)
+    wanted = (
+        ("c:yes", "x:yes") if cleaned in _YES else ("c:change", "x:no") if cleaned in _NO else ()
+    )
+    return next((o for o in offered if o.id in wanted), None)
 
 
 def _start(turn: _Turn) -> None:
@@ -354,7 +426,7 @@ async def _on_language(turn: _Turn, choice: Option | None) -> None:
 async def _on_menu(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
         if turn.conv.state == MENU and turn.conv.draft.get("options"):
-            _not_understood(turn)
+            await _fallback(turn)
         else:
             _show_menu(turn)
         return
@@ -368,9 +440,26 @@ async def _on_menu(turn: _Turn, choice: Option | None) -> None:
         _show_menu(turn)
 
 
-async def _start_booking(turn: _Turn) -> None:
+async def _start_booking(
+    turn: _Turn, hints: dict[str, str] | None = None, patient_name: str | None = None
+) -> None:
+    """Who is it for? Parsed free text may carry hints (doctor/day/time) for later steps."""
     people = await data.family(turn.session, turn.ctx.clinic_id, turn.conv.phone_e164)
-    turn.conv = replace(turn.conv, draft={"mode": "book"}, selected_patient_id=None)
+    turn.conv = replace(
+        turn.conv, draft={"mode": "book", "hints": hints or {}}, selected_patient_id=None
+    )
+    if patient_name:
+        named = [
+            p
+            for p in people
+            if first_name(p.name).casefold() == first_name(patient_name).casefold()
+        ]
+        if len(named) == 1:
+            turn.conv = replace(turn.conv, selected_patient_id=named[0].id).with_draft(
+                patient_name=named[0].name
+            )
+            await _ask_doctor(turn)
+            return
     if not people:
         _ask_name(turn)
         return
@@ -386,7 +475,7 @@ def _ask_name(turn: _Turn) -> None:
 
 async def _on_who(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     if choice.id == "p:new":
         _ask_name(turn)
@@ -424,10 +513,25 @@ async def _on_ask_name(turn: _Turn, choice: Option | None) -> None:
     await _ask_doctor(turn)
 
 
+def _take_hint(turn: _Turn, key: str) -> str | None:
+    """A parsed suggestion for this step, used once (so "Change" goes back to the lists)."""
+    hints: dict[str, str] = dict(turn.conv.draft.get("hints") or {})
+    value = hints.pop(key, None)
+    if value is not None:
+        turn.conv = turn.conv.with_draft(hints=hints)
+    return value
+
+
 async def _ask_doctor(turn: _Turn) -> None:
     doctors = await data.active_doctors(turn.session, turn.ctx.clinic_id)
     if not doctors:
         _show_menu(turn, t(turn.lang, "no_doctors"))
+        return
+    hinted = _take_hint(turn, "doctor_id")
+    doctor = next((d for d in doctors if str(d.id) == hinted), None)
+    if doctor is not None:
+        turn.conv = turn.conv.with_draft(doctor_id=str(doctor.id), doctor_name=doctor.name)
+        await _ask_date(turn)
         return
     options = [Option(f"d:{d.id}", d.name, d.specialization) for d in doctors]
     _present(turn, DOCTOR, t(turn.lang, "doctor"), options)
@@ -435,7 +539,7 @@ async def _ask_doctor(turn: _Turn) -> None:
 
 async def _on_doctor(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     doctor = await data.doctor(turn.session, turn.ctx.clinic_id, UUID(choice.id.removeprefix("d:")))
     if doctor is None:
@@ -459,6 +563,11 @@ async def _ask_date(turn: _Turn) -> None:
         turn.replies.append(Reply(text=text))
         await _ask_doctor(turn)
         return
+    hinted = _take_hint(turn, "day")
+    if hinted is not None and any(day.isoformat() == hinted for day, _ in days):
+        turn.conv = turn.conv.with_draft(day=hinted)
+        await _ask_slot(turn, date.fromisoformat(hinted))
+        return
     options = [
         Option(
             f"day:{day.isoformat()}",
@@ -478,7 +587,7 @@ async def _on_date(turn: _Turn, choice: Option | None) -> None:
                 (o for o in _all_options(turn) if o.id == f"day:{wanted.isoformat()}"), None
             )
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     day = date.fromisoformat(choice.id.removeprefix("day:"))
     turn.conv = replace(turn.conv, failed_parse_count=0).with_draft(day=day.isoformat())
@@ -494,8 +603,18 @@ async def _ask_slot(turn: _Turn, day: date) -> None:
         await _ask_date(turn)
         return
     options = [Option(f"t:{s.isoformat()}", time_label(s, turn.ctx.tz)) for s in slots]
+    hinted = _take_hint(turn, "time")
+    if hinted is not None:
+        # The asked-for time first (if free), then the rest; the patient still picks.
+        wanted = [o for o in options if _slot_time(o, turn) == hinted]
+        options = wanted + [o for o in options if o not in wanted]
     label = day_label(turn.lang, day, turn.ctx.today)
     _present(turn, SLOT, t(turn.lang, "slot", day=label), options)
+
+
+def _slot_time(option: Option, turn: _Turn) -> str:
+    starts_at = datetime.fromisoformat(option.id.removeprefix("t:"))
+    return starts_at.astimezone(turn.ctx.tz).strftime("%H:%M")
 
 
 def _all_options(turn: _Turn) -> list[Option]:
@@ -521,7 +640,7 @@ async def _on_slot(turn: _Turn, choice: Option | None) -> None:
                 None,
             )
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     starts_at = datetime.fromisoformat(choice.id.removeprefix("t:"))
     turn.conv = replace(turn.conv, failed_parse_count=0).with_draft(starts_at=starts_at.isoformat())
@@ -570,7 +689,7 @@ def _ask_confirm(turn: _Turn) -> None:
 
 async def _on_confirm(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     if choice.id == "c:change":
         await _ask_doctor(turn)
@@ -675,7 +794,7 @@ async def _show_my_appointments(turn: _Turn) -> None:
 
 async def _on_my_appts(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     appointment_id = UUID(choice.id.removeprefix("a:"))
     items = await data.upcoming(
@@ -710,7 +829,7 @@ async def _on_my_appts(turn: _Turn, choice: Option | None) -> None:
 
 async def _on_appt_action(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     if choice.id == "act:cancel":
         options = [
@@ -727,7 +846,7 @@ async def _on_appt_action(turn: _Turn, choice: Option | None) -> None:
 
 async def _on_cancel_confirm(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     if choice.id != "x:yes":
         _show_menu(turn)
@@ -750,7 +869,7 @@ def _ask_resched_confirm(turn: _Turn) -> None:
 
 async def _on_resched_confirm(turn: _Turn, choice: Option | None) -> None:
     if choice is None:
-        _not_understood(turn)
+        await _fallback(turn)
         return
     if choice.id == "c:change":
         await _ask_date(turn)

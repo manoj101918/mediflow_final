@@ -15,6 +15,7 @@ import type {
   AppointmentSource,
   AppointmentStatus,
   DaySlots,
+  DecisionAppointment,
   Doctor,
   Page,
 } from '@/types/api'
@@ -66,10 +67,10 @@ export const changeStatus = (id: string, status: AppointmentStatus, note?: strin
   })
 
 export const approveAppointment = (id: string) =>
-  api<Appointment>(`/appointments/${id}/approve`, { method: 'POST' })
+  api<DecisionAppointment>(`/appointments/${id}/approve`, { method: 'POST' })
 
 export const rejectAppointment = (id: string, reason?: string) =>
-  api<Appointment>(`/appointments/${id}/reject`, {
+  api<DecisionAppointment>(`/appointments/${id}/reject`, {
     method: 'POST',
     body: { reason: reason || null },
   })

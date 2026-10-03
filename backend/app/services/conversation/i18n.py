@@ -187,6 +187,27 @@ CATALOG: dict[str, dict[Language, str]] = {
         "hi": "माफ़ कीजिए, मैं सिर्फ़ टेक्स्ट, बटन और वॉइस नोट पढ़ सकता हूँ।",
         "en": "Sorry, I can only read text, buttons and voice notes.",
     },
+    "approved": {
+        "te": "మీ అపాయింట్‌మెంట్ నిర్ధారించబడింది.\nరోగి: {patient}\nడాక్టర్: {doctor}\nరోజు: {day}\n"
+        "సమయం: {time}\nటోకెన్ నంబర్: {token}",
+        "hi": "आपका अपॉइंटमेंट पक्का हो गया है।\nमरीज़: {patient}\nडॉक्टर: {doctor}\nदिन: {day}\n"
+        "समय: {time}\nटोकन नंबर: {token}",
+        "en": "Your appointment is confirmed.\nPatient: {patient}\nDoctor: {doctor}\nDay: {day}\n"
+        "Time: {time}\nToken number: {token}",
+    },
+    "rejected": {
+        "te": "క్షమించండి, {day} {time} అభ్యర్థనను రిసెప్షన్ నిర్ధారించలేకపోయింది. దయచేసి వేరే సమయం ఎంచుకోండి.",
+        "hi": "माफ़ कीजिए, रिसेप्शन {day} {time} का अनुरोध पक्का नहीं कर सका। कृपया कोई और समय चुनें।",
+        "en": "Sorry, reception couldn't confirm your request for {day} {time}. Please choose "
+        "another time.",
+    },
+    "rejected_no_slots": {
+        "te": "క్షమించండి, {day} {time} అభ్యర్థనను రిసెప్షన్ నిర్ధారించలేకపోయింది. మళ్లీ ప్రయత్నించడానికి MENU పంపండి.",
+        "hi": "माफ़ कीजिए, रिसेप्शन {day} {time} का अनुरोध पक्का नहीं कर सका। फिर से कोशिश करने "
+        "के लिए MENU भेजें।",
+        "en": "Sorry, reception couldn't confirm your request for {day} {time}. Send MENU to try "
+        "again.",
+    },
     "notice_short": {
         "te": "నమస్కారం! ఇది {clinic} ఆటోమేటెడ్ బుకింగ్ సహాయకుడు. మీ వివరాలు అపాయింట్‌మెంట్ల కోసం "
         "మాత్రమే వాడతాము. ఆపడానికి స్టాప్ అనండి.",

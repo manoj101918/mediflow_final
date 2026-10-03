@@ -124,9 +124,12 @@ def get_embeddings() -> Embeddings:
 
 # --- Chat model ---------------------------------------------------------------------------
 
-ChatPurpose = Literal["answer", "rewrite"]
+# "intent": the booking bot's free-text parser (short JSON, no streaming).
+ChatPurpose = Literal["answer", "rewrite", "intent"]
 
 FAKE_CHAT_MODEL = "fake-records-model"
+# Short outputs (hidden gpt-oss reasoning counts against the budget too).
+_MAX_TOKENS: dict[str, int] = {"rewrite": 200, "intent": 400}
 
 
 def _reasoning_options(model: str, effort: str) -> dict[str, Any]:
@@ -155,7 +158,7 @@ def build_chat_model(settings: Settings, purpose: ChatPurpose = "answer") -> Bas
         model=settings.llm_model,
         api_key=SecretStr(key),
         # Short standalone queries for retrieval; full answers otherwise.
-        max_tokens=200 if purpose == "rewrite" else settings.llm_max_tokens,
+        max_tokens=_MAX_TOKENS.get(purpose, settings.llm_max_tokens),
         temperature=0,
         timeout=settings.llm_timeout_seconds,
         max_retries=1,

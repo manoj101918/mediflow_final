@@ -78,20 +78,19 @@ def match_option(msg: InboundMsg, options: Sequence[Option]) -> Option | None:
         return " ".join(w for w in value.split() if w not in _FILLER)
 
     core = significant(text)
-    contained = [
-        o
-        for o, title in titles
-        if (s := significant(title)) and (f" {s} " in f" {core} " or _all_words_in(s, core))
-    ]
+    # A title's distinctive last word ("sharma" for "Dr. Anil Sharma"), unless another
+    # offered title shares that word ("appointment" in two menu buttons).
+    title_words = [set(significant(title).split()) for _, title in titles]
+    spoken = set(core.split())
+    contained = []
+    for index, (option, title) in enumerate(titles):
+        core_title = significant(title)
+        if not core_title:
+            continue
+        last = core_title.split()[-1]
+        shared = any(last in words for i, words in enumerate(title_words) if i != index)
+        if f" {core_title} " in f" {core} " or (len(last) >= 3 and last in spoken and not shared):
+            contained.append(option)
     if len(contained) == 1:
         return contained[0]
     return None
-
-
-def _all_words_in(title: str, text: str) -> bool:
-    """Every word of the title's last name part appears ("sharma" matches "Dr. Anil Sharma")."""
-    words = title.split()
-    if not words:
-        return False
-    last = words[-1]
-    return len(last) >= 3 and last in text.split()

@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     admin,
     appointments,
+    bot,
+    bot_admin,
     chat,
     doctors,
     inbound,
@@ -15,12 +17,15 @@ from app.api import (
     patients,
     records,
     reports,
+    voice_sim,
+    whatsapp,
 )
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import add_request_logging, configure_logging
 from app.core.rate_limit import register_rate_limiting
 from app.db.session import dispose_engine, get_sessionmaker
+from app.services.bot_jobs.worker import BotWorker
 from app.services.ingestion.worker import IngestionWorker
 
 
@@ -31,9 +36,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     worker = IngestionWorker(get_sessionmaker(), settings.ingestion_poll_seconds)
     if settings.ingestion_worker_enabled:
         worker.start()
+    # The booking bot's worker (WhatsApp turns, replies, delivery statuses).
+    bot_worker = BotWorker(get_sessionmaker(), settings.bot_poll_seconds)
+    if settings.bot_worker_enabled:
+        bot_worker.start()
     try:
         yield
     finally:
+        await bot_worker.stop()
         await worker.stop()
         await dispose_engine()
 
@@ -73,11 +83,15 @@ def create_app() -> FastAPI:
         patients,
         doctors,
         admin,
+        bot,
+        bot_admin,
         inbound,
         records,
         reports,
         chat,
         labs,
+        whatsapp,
+        voice_sim,
     ):
         app.include_router(module.router, prefix="/api")
     return app

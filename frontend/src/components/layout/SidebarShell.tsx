@@ -39,7 +39,18 @@ function Nav({ items, label, onNavigate }: { items: NavItem[]; label: string; on
 }
 
 /** Top bar + sidebar navigation (slide-out on mobile) around the routed page. */
-export function SidebarShell({ items, label, children }: { items: NavItem[]; label: string; children?: ReactNode }) {
+export function SidebarShell({
+  items,
+  label,
+  banner,
+  children,
+}: {
+  items: NavItem[]
+  label: string
+  /** Shown under the top bar on every page (e.g. emergency alerts). */
+  banner?: ReactNode
+  children?: ReactNode
+}) {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div className="flex min-h-svh flex-col bg-muted/30">
@@ -54,6 +65,7 @@ export function SidebarShell({ items, label, children }: { items: NavItem[]; lab
           <MenuIcon />
         </Button>
       </TopBar>
+      {banner}
       <div className="flex flex-1">
         <aside className="hidden w-52 shrink-0 border-r bg-background md:block">
           <Nav items={items} label={label} />

@@ -10,15 +10,17 @@ import type { Appointment } from '@/types/api'
  * (e.g. another receptionist changed it first) show the server's message. Either way the
  * appointment lists are refetched so the screen matches the database.
  */
-export function useAppointmentMutation<TVars>(
-  mutationFn: (vars: TVars) => Promise<Appointment>,
-  describe: (appointment: Appointment, vars: TVars) => string,
+export function useAppointmentMutation<TVars, TResult extends Appointment = Appointment>(
+  mutationFn: (vars: TVars) => Promise<TResult>,
+  describe: (appointment: TResult, vars: TVars) => string,
+  after?: (appointment: TResult) => void,
 ) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn,
     onSuccess: (appointment, vars) => {
       toast.success(describe(appointment, vars))
+      after?.(appointment)
     },
     onError: (error) => {
       toast.error(error instanceof ApiError ? error.message : 'Something went wrong.')

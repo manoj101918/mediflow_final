@@ -3,6 +3,7 @@ import { InboxIcon } from 'lucide-react'
 
 import { SourceBadge } from '@/components/appointments/Badges'
 import { RowActions } from '@/components/appointments/RowActions'
+import { ViewChatButton } from '@/components/bot/ViewChatButton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { appointmentKeys } from '@/lib/appointments'
@@ -43,7 +44,7 @@ export function PendingConfirmation({ today }: { today: string }) {
       <CardContent>
         <ul className="divide-y rounded-lg border bg-background">
           {items.map((a) => (
-            <li key={a.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
+            <li key={a.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3" data-pending-appointment-id={a.id}>
               <div className="min-w-40 flex-1">
                 <div className="font-medium">{a.patient.full_name}</div>
                 <div className="text-xs text-muted-foreground">
@@ -57,7 +58,10 @@ export function PendingConfirmation({ today }: { today: string }) {
                 </div>
                 <div className="text-xs text-muted-foreground">{a.doctor.full_name}</div>
               </div>
-              <SourceBadge source={a.source} />
+              <div className="flex flex-col items-start gap-0.5">
+                <SourceBadge source={a.source} />
+                <ViewChatButton appointment={a} />
+              </div>
               <RowActions appointment={a} />
             </li>
           ))}

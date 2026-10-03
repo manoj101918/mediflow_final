@@ -89,3 +89,16 @@ class RescheduleIn(BaseModel):
 
 class RejectIn(BaseModel):
     reason: ShortText = None
+
+
+class BotNotificationOut(BaseModel):
+    """What happened to the patient's WhatsApp / voice message about a decision."""
+
+    # queued | window_closed | opted_out | no_consent | limit | not_configured | no_conversation
+    status: str
+    channel: str
+    phone: str
+
+
+class DecisionOut(AppointmentOut):
+    notification: BotNotificationOut | None = None

@@ -12,6 +12,7 @@ LANGUAGES: tuple[Language, ...] = ("te", "hi", "en")
 InboundKind = Literal["text", "reply", "voice", "location", "unsupported"]
 ReplyKind = Literal["reply", "notice", "emergency", "opt_out"]
 HandoffReason = Literal["button", "parse_failed", "emergency"]
+VoiceError = Literal["too_long", "failed"]
 
 # WhatsApp interactive limits (also used to keep voice prompts short).
 MAX_BUTTONS = 3
@@ -39,6 +40,8 @@ class InboundMsg:
     external_id: str | None = None
     # When the patient sent it (Meta's timestamp); used to spot out-of-order delivery.
     sent_at: datetime | None = None
+    # Voice notes that could not be transcribed.
+    voice_error: VoiceError | None = None
 
 
 @dataclass(frozen=True)

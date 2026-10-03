@@ -6,14 +6,24 @@ from fastapi import APIRouter, Query, status
 
 from app.api.results import not_found, unwrap
 from app.core.errors import AppError
-from app.db.models import AppointmentSource, AppointmentStatus, UserRole
-from app.deps import AuthUser, CurrentUser, DbSession, FrontDeskUser, clinic_today, staff_actor
+from app.db.models import Appointment, AppointmentSource, AppointmentStatus, UserRole
+from app.deps import (
+    AuthUser,
+    BotDispatch,
+    CurrentUser,
+    DbSession,
+    FrontDeskUser,
+    clinic_today,
+    staff_actor,
+)
 from app.schemas.appointments import (
     AppointmentCreate,
     AppointmentDetailOut,
     AppointmentEventOut,
     AppointmentOut,
     AppointmentSummaryOut,
+    BotNotificationOut,
+    DecisionOut,
     DoctorBrief,
     PatientBrief,
     RejectIn,
@@ -30,6 +40,7 @@ from app.services.booking import (
     reschedule_appointment,
     update_appointment_status,
 )
+from app.services.messaging.notify import Decision, notify_decision
 from app.services.patients import patient_age
 from app.services.records.consultations import complete_visit
 
@@ -201,17 +212,38 @@ async def reschedule(
     return to_out(await queries.get_appointment_row(session, user.clinic_id, appointment), user)
 
 
+async def _decision_out(
+    session: DbSession,
+    user: CurrentUser,
+    appointment: Appointment,
+    decision: Decision,
+    deps: BotDispatch,
+) -> DecisionOut:
+    """The appointment plus what happened to the patient's bot message."""
+    out = to_out(await queries.get_appointment_row(session, user.clinic_id, appointment), user)
+    appointment_id = out.id
+    sent = await notify_decision(session, user.clinic_id, appointment_id, decision, deps)
+    notification = (
+        BotNotificationOut(status=sent.status, channel=sent.channel.value, phone=sent.phone_e164)
+        if sent is not None
+        else None
+    )
+    return DecisionOut(**out.model_dump(), notification=notification)
+
+
 @router.post("/{appointment_id}/approve")
-async def approve(appointment_id: UUID, session: DbSession, user: FrontDeskUser) -> AppointmentOut:
+async def approve(
+    appointment_id: UUID, session: DbSession, user: FrontDeskUser, deps: BotDispatch
+) -> DecisionOut:
     appointment = unwrap(await approve_appointment(session, appointment_id, staff_actor(user)))
-    return to_out(await queries.get_appointment_row(session, user.clinic_id, appointment), user)
+    return await _decision_out(session, user, appointment, "approval", deps)
 
 
 @router.post("/{appointment_id}/reject")
 async def reject(
-    appointment_id: UUID, body: RejectIn, session: DbSession, user: FrontDeskUser
-) -> AppointmentOut:
+    appointment_id: UUID, body: RejectIn, session: DbSession, user: FrontDeskUser, deps: BotDispatch
+) -> DecisionOut:
     appointment = unwrap(
         await reject_appointment(session, appointment_id, staff_actor(user), body.reason)
     )
-    return to_out(await queries.get_appointment_row(session, user.clinic_id, appointment), user)
+    return await _decision_out(session, user, appointment, "rejection", deps)

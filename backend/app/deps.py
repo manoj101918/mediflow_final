@@ -19,6 +19,8 @@ from app.db.models import Clinic, Doctor, Profile, UserRole
 from app.db.session import get_session, get_sessionmaker
 from app.services.booking.actor import StaffActor
 from app.services.booking.timeutil import clinic_tz, today_local
+from app.services.messaging.deps import dispatch_deps
+from app.services.messaging.dispatch import DispatchDeps
 
 DbSession = Annotated[AsyncSession, Depends(get_session)]
 
@@ -132,3 +134,11 @@ def staff_actor(user: CurrentUser) -> StaffActor:
 
 def clinic_today(user: CurrentUser) -> date:
     return today_local(clinic_tz(user.clinic_timezone))
+
+
+def get_dispatch_deps() -> DispatchDeps:
+    """How bot messages are sent (WhatsApp sender, free-tier limits). Tests override this."""
+    return dispatch_deps()
+
+
+BotDispatch = Annotated[DispatchDeps, Depends(get_dispatch_deps)]

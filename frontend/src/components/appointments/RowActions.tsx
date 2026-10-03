@@ -12,6 +12,7 @@ import {
 import { useState } from 'react'
 
 import { ReasonDialog } from '@/components/appointments/ReasonDialog'
+import { showNotificationToast } from '@/components/bot/notificationToast'
 import { ReportUploadDialog } from '@/components/chart/ReportUploadDialog'
 import { RescheduleDialog } from '@/components/appointments/RescheduleDialog'
 import { useAppointmentMutation, who } from '@/components/appointments/useAppointmentMutation'
@@ -63,10 +64,12 @@ export function RowActions({ appointment }: { appointment: Appointment }) {
   const approve = useAppointmentMutation(
     () => approveAppointment(id),
     (a) => `${who(a)} confirmed`,
+    (a) => showNotificationToast(a.notification),
   )
   const reject = useAppointmentMutation(
     (reason: string) => rejectAppointment(id, reason),
     (a) => `${who(a)} rejected`,
+    (a) => showNotificationToast(a.notification),
   )
   const busy = statusMutation.isPending || approve.isPending || reject.isPending
 

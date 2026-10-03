@@ -795,3 +795,142 @@ export interface LabAlert {
   range_label: string | null
   created_at: string
 }
+
+// --- Booking bot (backend app/schemas/bot.py, appointments.DecisionOut) ---
+
+export type BotChannel = Enums['bot_channel']
+
+export type BotNotificationStatus =
+  | 'queued'
+  | 'window_closed'
+  | 'opted_out'
+  | 'no_consent'
+  | 'limit'
+  | 'not_configured'
+  | 'no_conversation'
+
+/** What happened to the patient's WhatsApp / voice message after approve or reject. */
+export interface BotNotification {
+  status: BotNotificationStatus
+  channel: BotChannel
+  phone: string
+}
+
+export interface DecisionAppointment extends Appointment {
+  notification: BotNotification | null
+}
+
+export interface BotUsage {
+  month: string
+  sent: number
+  limit: number
+  reserve_from: number
+  warn: boolean
+  exhausted: boolean
+}
+
+export interface WhatsAppStatus {
+  configured: boolean
+  fake: boolean
+  connected: boolean | null
+  display_phone_number: string | null
+  verified_name: string | null
+  error: string | null
+  webhook_url: string | null
+  webhook_last_seen_at: string | null
+  paid_templates_allowed: boolean
+}
+
+export interface BotStatus {
+  whatsapp: WhatsAppStatus
+  usage: BotUsage
+  llm_enabled: boolean
+  stt_provider: string
+  tts_provider: string
+  clinic_configured: boolean
+}
+
+export interface BotConversationSummary {
+  id: string
+  channel: BotChannel
+  phone: string
+  names: string[]
+  language: 'te' | 'hi' | 'en' | null
+  state: string
+  handoff_status: 'none' | 'open' | 'resolved'
+  handoff_reason: 'button' | 'parse_failed' | 'emergency' | 'staff' | null
+  handoff_at: string | null
+  last_inbound_at: string | null
+  last_message: string | null
+  window_open: boolean
+  opted_out: boolean
+  open_alerts: number
+  emergency: boolean
+}
+
+export interface BotTranscriptMessage {
+  id: string
+  direction: 'inbound' | 'outbound'
+  type: string
+  text: string | null
+  transcript: string | null
+  status: string
+  created_at: string
+}
+
+export interface BotConversationDetail extends BotConversationSummary {
+  messages: BotTranscriptMessage[]
+}
+
+export interface BotAlert {
+  id: string
+  kind: 'emergency' | 'handoff'
+  conversation_id: string
+  channel: BotChannel
+  phone: string
+  names: string[]
+  excerpt: string | null
+  created_at: string
+}
+
+export type KeywordKind = 'emergency' | 'stop' | 'start'
+export type BotLanguage = 'te' | 'hi' | 'en'
+
+export interface KeywordList {
+  kind: KeywordKind
+  language: BotLanguage
+  words: string[]
+  custom: boolean
+}
+
+export interface SimOption {
+  id: string
+  title: string
+  description: string | null
+}
+
+export interface SimReply {
+  text: string
+  options: SimOption[]
+}
+
+export interface VoiceTurn {
+  transcript: string
+  voice_error: 'too_long' | 'failed' | null
+  replies: SimReply[]
+  speech_text: string
+  audio_base64: string | null
+  audio_mime: string | null
+  tts_provider: string
+  appointment_id: string | null
+  state: string
+}
+
+export interface SimMessage {
+  id: string
+  kind: string
+  text: string
+  status: string
+  appointment_id: string | null
+  created_at: string
+}

@@ -1,5 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { CalendarDaysIcon, LayoutDashboardIcon, StethoscopeIcon, UsersIcon } from 'lucide-react'
+import {
+  CalendarDaysIcon,
+  LayoutDashboardIcon,
+  MessagesSquareIcon,
+  StethoscopeIcon,
+  UsersIcon,
+} from 'lucide-react'
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -7,6 +13,7 @@ import {
   NewAppointmentContext,
   type NewAppointmentPrefill,
 } from '@/components/appointments/newAppointmentContext'
+import { EmergencyBanner } from '@/components/bot/EmergencyBanner'
 import { type NavItem, SidebarShell } from '@/components/layout/SidebarShell'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { type AppointmentRow, useRealtimeAppointments } from '@/hooks/useRealtimeAppointments'
@@ -24,6 +31,7 @@ const NAV: NavItem[] = [
   { to: '/reception/appointments', label: 'Appointments', icon: CalendarDaysIcon },
   { to: '/reception/patients', label: 'Patients', icon: UsersIcon },
   { to: '/reception/doctors', label: 'Doctors', icon: StethoscopeIcon },
+  { to: '/reception/inbox', label: 'Bot inbox', icon: MessagesSquareIcon },
 ]
 
 export function ReceptionLayout() {
@@ -62,7 +70,7 @@ export function ReceptionLayout() {
 
   return (
     <NewAppointmentContext value={newAppointment}>
-      <SidebarShell items={NAV} label="Reception">
+      <SidebarShell items={NAV} label="Reception" banner={<EmergencyBanner />}>
         {booking.session > 0 && (
           <Suspense fallback={null}>
             <NewAppointmentSheet

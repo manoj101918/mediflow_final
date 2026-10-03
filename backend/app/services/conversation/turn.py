@@ -29,6 +29,7 @@ from app.db.models import (
 )
 from app.services.booking.timeutil import utcnow
 from app.services.conversation import data, engine
+from app.services.conversation.intent import Understander
 from app.services.conversation.keywords import KeywordSet, load_keywords
 from app.services.conversation.types import (
     ConvState,
@@ -107,6 +108,7 @@ async def run_turn(
     now: datetime | None = None,
     keywords: KeywordSet | None = None,
     extras: dict[str, Any] | None = None,
+    understand: Understander | None = None,
 ) -> TurnResult:
     moment = now or utcnow()
     words = keywords or await load_keywords(session, clinic_id)
@@ -119,6 +121,7 @@ async def run_turn(
         keywords=words,
         opted_out=await is_opted_out(session, clinic_id, msg.phone_e164),
         extras=extras or {},
+        understand=understand,
     )
     for _ in range(2):
         conv = await load_conversation(session, clinic_id, msg.channel, msg.phone_e164)

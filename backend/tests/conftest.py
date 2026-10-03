@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import pytest
@@ -37,6 +37,9 @@ from app.services.labs.catalog_seed import install_catalog
 from app.services.rag.providers import FakeRecordsChatModel, RagProviders
 from app.services.records.storage import get_report_storage
 from app.services.users import EmailTakenError, get_auth_admin
+
+if TYPE_CHECKING:
+    from tests.whatsapp_utils import WhatsAppHarness
 
 
 @pytest.fixture(scope="session")
@@ -464,3 +467,31 @@ def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
 
 def auth(user_id: UUID) -> dict[str, str]:
     return {"Authorization": f"Bearer {user_id}"}
+
+
+@pytest.fixture
+async def wa(
+    app: FastAPI, client: AsyncClient, clinic: ClinicFixture, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator["WhatsAppHarness"]:
+    """WhatsApp wired to this clinic: signed webhooks in, a FakeWhatsApp out (no Meta calls)."""
+    from pydantic import SecretStr  # noqa: PLC0415
+
+    from app.deps import get_dispatch_deps  # noqa: PLC0415
+    from app.services.whatsapp.client import FakeWhatsApp  # noqa: PLC0415
+    from tests.whatsapp_utils import (  # noqa: PLC0415
+        PHONE_ID,
+        SECRET,
+        VERIFY,
+        WhatsAppHarness,
+        bot_deps,
+    )
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "whatsapp_app_secret", SecretStr(SECRET))
+    monkeypatch.setattr(settings, "whatsapp_verify_token", SecretStr(VERIFY))
+    monkeypatch.setattr(settings, "whatsapp_phone_number_id", PHONE_ID)
+    monkeypatch.setattr(settings, "inbound_clinic_id", clinic.id)
+    fake = FakeWhatsApp()
+    harness = WhatsAppHarness(client=client, clinic=clinic, fake=fake, deps=bot_deps(fake))
+    app.dependency_overrides[get_dispatch_deps] = lambda: harness.deps.dispatch
+    yield harness

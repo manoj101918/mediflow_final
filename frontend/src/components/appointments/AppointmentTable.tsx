@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { SourceBadge, StatusBadge } from '@/components/appointments/Badges'
 import { RowActions } from '@/components/appointments/RowActions'
+import { ViewChatButton } from '@/components/bot/ViewChatButton'
 import { LabCountsBadge } from '@/components/labs/LabBadges'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -96,7 +97,10 @@ export function AppointmentTable({
                   {a.reason_for_visit ?? <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  <SourceBadge source={a.source} />
+                  <div className="flex flex-col items-start gap-0.5">
+                    <SourceBadge source={a.source} />
+                    <ViewChatButton appointment={a} />
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1">

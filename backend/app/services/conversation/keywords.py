@@ -10,7 +10,8 @@ import unicodedata
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotKeywordList
@@ -182,3 +183,67 @@ def is_medical_question(text: str) -> bool:
     if MEDICAL_WORDS.intersection(cleaned.split()):
         return True
     return any(phrase in cleaned for phrase in MEDICAL_PHRASES)
+
+
+@dataclass(frozen=True)
+class KeywordList:
+    kind: str
+    language: Language
+    words: list[str]
+    custom: bool  # False = the built-in defaults
+
+
+async def keyword_lists(session: AsyncSession, clinic_id: UUID) -> list[KeywordList]:
+    """Every editable list (emergency/stop/start x te/hi/en), custom or default."""
+    rows = await session.scalars(
+        select(BotKeywordList).where(BotKeywordList.clinic_id == clinic_id)
+    )
+    custom = {(row.kind, row.language): list(row.words) for row in rows}
+    return [
+        KeywordList(
+            kind=kind,
+            language=lang,
+            words=custom.get((kind, lang), list(DEFAULT_KEYWORDS[kind][lang])),
+            custom=(kind, lang) in custom,
+        )
+        for kind in KEYWORD_KINDS
+        for lang in LANGUAGES
+    ]
+
+
+def clean_words(words: list[str]) -> list[str]:
+    """Trimmed, de-duplicated, non-empty words (max 100, each up to 60 characters)."""
+    seen: dict[str, str] = {}
+    for word in words:
+        value = " ".join(word.split())[:60]
+        if value and normalize(value) and normalize(value) not in seen:
+            seen[normalize(value)] = value
+    return list(seen.values())[:100]
+
+
+async def save_keyword_list(
+    session: AsyncSession,
+    clinic_id: UUID,
+    kind: str,
+    language: Language,
+    words: list[str] | None,
+    user_id: UUID,
+) -> None:
+    """Replace a list; None restores the built-in defaults."""
+
+    if words is None:
+        await session.execute(
+            delete(BotKeywordList).where(
+                BotKeywordList.clinic_id == clinic_id,
+                BotKeywordList.kind == kind,
+                BotKeywordList.language == language,
+            )
+        )
+    else:
+        values = {"words": clean_words(words), "updated_by": user_id}
+        await session.execute(
+            insert(BotKeywordList)
+            .values(clinic_id=clinic_id, kind=kind, language=language, **values)
+            .on_conflict_do_update(index_elements=["clinic_id", "kind", "language"], set_=values)
+        )
+    await session.commit()
