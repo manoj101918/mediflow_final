@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftIcon, Loader2Icon, PrinterIcon, TestTubeIcon, XCircleIcon } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeftIcon, Loader2Icon, PaperclipIcon, PrinterIcon, TestTubeIcon, XCircleIcon } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -17,7 +17,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiError } from '@/lib/api'
 import { formatDate, formatPatientMeta, formatPhone, formatTime } from '@/lib/format'
-import { LAB_SAMPLE_LABEL, cancelLabOrder, collectSamples, fetchLabOrder, labKeys, rejectSample } from '@/lib/labs'
+import { LAB_SAMPLE_LABEL, attachLabPdf, cancelLabOrder, collectSamples, fetchLabOrder, labKeys, rejectSample } from '@/lib/labs'
 import type { LabOrderDetail, LabSample } from '@/types/api'
 
 const REJECT_REASONS = ['Haemolysed', 'Insufficient volume', 'Wrong container', 'Clotted', 'Unlabelled or mislabelled']
@@ -103,6 +103,7 @@ export function LabOrderPage() {
       </Card>
 
       <Collection detail={detail.data} onUpdated={updated} />
+      <AttachPdf orderId={order.id} />
 
       {withResults.map((item) => (
         <ResultEntry
@@ -322,5 +323,34 @@ function RejectDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AttachPdf({ orderId }: { orderId: string }) {
+  const input = useRef<HTMLInputElement>(null)
+  const attach = useMutation({
+    mutationFn: (file: File) => attachLabPdf(orderId, file),
+    onSuccess: () => toast.success('Machine PDF attached to the order'),
+    onError: (e) => toast.error(errorText(e)),
+  })
+  return (
+    <div className="flex justify-end">
+      <input
+        ref={input}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        aria-label="Lab machine PDF"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) attach.mutate(file)
+          e.target.value = ''
+        }}
+      />
+      <Button variant="ghost" size="sm" disabled={attach.isPending} onClick={() => input.current?.click()}>
+        {attach.isPending ? <Loader2Icon className="animate-spin" /> : <PaperclipIcon />}
+        Attach lab machine PDF
+      </Button>
+    </div>
   )
 }

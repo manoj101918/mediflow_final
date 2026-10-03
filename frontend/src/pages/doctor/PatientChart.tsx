@@ -13,6 +13,7 @@ import { useReports } from '@/hooks/useReports'
 import { VisitHistory } from '@/components/chart/VisitHistory'
 import { VitalsTrend } from '@/components/chart/VitalsTrend'
 import { LabResultsTab } from '@/components/labs/LabResultsTab'
+import { LabTrends } from '@/components/labs/LabTrends'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,7 +21,7 @@ import { ApiError } from '@/lib/api'
 import { fetchChart, recordKeys } from '@/lib/records'
 import type { Citation } from '@/types/api'
 
-type Tab = 'current' | 'history' | 'labs' | 'medications' | 'reports' | 'vitals'
+type Tab = 'current' | 'history' | 'labs' | 'lab-trends' | 'medications' | 'reports' | 'vitals'
 
 export function PatientChartPage() {
   const { patientId = '' } = useParams()
@@ -112,6 +113,7 @@ export function PatientChartPage() {
             <TabsTrigger value="medications">Medications</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
             <TabsTrigger value="vitals">Vitals trend</TabsTrigger>
+            <TabsTrigger value="lab-trends">Lab trends</TabsTrigger>
           </TabsList>
           {hasVisit && appointmentId && (
             <TabsContent value="current" forceMount hidden={tab !== 'current'}>
@@ -132,6 +134,9 @@ export function PatientChartPage() {
           </TabsContent>
           <TabsContent value="vitals">
             <VitalsTrend patientId={patientId} />
+          </TabsContent>
+          <TabsContent value="lab-trends">
+            <LabTrends patientId={patientId} />
           </TabsContent>
         </Tabs>
       </div>

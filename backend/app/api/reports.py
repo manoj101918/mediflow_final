@@ -43,6 +43,8 @@ def report_out(report: PatientReport) -> ReportOut:
         page_count=report.page_count,
         ingestion_status=report.ingestion_status,
         ingestion_error=report.ingestion_error,
+        lab_order_id=report.lab_order_id,
+        is_generated=report.is_generated,
         created_at=report.created_at,
         updated_at=report.updated_at,
     )

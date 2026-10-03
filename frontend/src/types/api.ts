@@ -461,6 +461,9 @@ export interface Report {
   page_count: number | null
   ingestion_status: IngestionStatus
   ingestion_error: string | null
+  /** Lab PDFs: generated from an order's results, or the lab machine's own PDF. */
+  lab_order_id: string | null
+  is_generated: boolean
   created_at: string
   updated_at: string
 }

@@ -49,7 +49,7 @@ export function ReportsTab({ patientId, canView, onOpenReport }: Props) {
               key={report.id}
               report={report}
               patientId={patientId}
-              onOpen={canView && onOpenReport ? () => onOpenReport(report.id) : undefined}
+              onOpen={canView && onOpenReport && !(report.is_generated && report.size_bytes === 0) ? () => onOpenReport(report.id) : undefined}
             />
           ))}
         </ul>
@@ -62,6 +62,15 @@ export function ReportsTab({ patientId, canView, onOpenReport }: Props) {
 }
 
 export function IngestionBadge({ report }: { report: Report }) {
+  // Lab PDFs are searchable through the order's structured results, not their own text.
+  if (report.lab_order_id) {
+    const preparing = report.is_generated && report.size_bytes === 0
+    return (
+      <Badge variant="secondary" className="font-medium" data-lab-report={report.is_generated ? 'generated' : 'machine'}>
+        {preparing ? 'Lab report: preparing PDF' : report.is_generated ? 'Lab order' : 'Lab machine PDF'}
+      </Badge>
+    )
+  }
   const meta = INGESTION_META[report.ingestion_status]
   return (
     <Badge className={cn('font-medium', meta.className)} title={report.ingestion_error ?? undefined}>

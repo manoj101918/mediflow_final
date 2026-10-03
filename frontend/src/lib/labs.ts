@@ -216,3 +216,10 @@ export const amendLabItem = (itemId: string, values: LabValueInput[], reason: st
 
 export const fetchLabSettings = (signal?: AbortSignal) =>
   api<{ lab_requires_verification: boolean }>('/lab/settings', { signal })
+
+/** The lab machine's own PDF for an order (stored with the order, not indexed separately). */
+export function attachLabPdf(orderId: string, file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return api<{ id: string; title: string }>(`/lab/orders/${orderId}/attachment`, { method: 'POST', body: form })
+}

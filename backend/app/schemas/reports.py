@@ -24,6 +24,9 @@ class ReportOut(BaseModel):
     ingestion_status: IngestionStatus
     # Why indexing failed / why the report has no searchable text.
     ingestion_error: str | None
+    # Lab PDFs: the clinic's generated report of an order, or the lab machine's own PDF.
+    lab_order_id: UUID | None = None
+    is_generated: bool = False
     created_at: UtcDateTime
     updated_at: UtcDateTime
 

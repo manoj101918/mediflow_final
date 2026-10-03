@@ -31,7 +31,14 @@ _SOURCES = text(
       select clinic_id, patient_id, 'consultation', id from public.consultations
         where status = 'finalized'
       union all
+      -- Lab PDFs are searchable through their order's structured results.
       select clinic_id, patient_id, 'report', id from public.patient_reports
+        where lab_order_id is null
+      union all
+      select o.clinic_id, o.patient_id, 'lab_result', o.id from public.lab_orders o
+        where exists (
+          select 1 from public.lab_order_items i where i.order_id = o.id and i.status = 'released'
+        )
     ) s
     where cast(:patient as uuid) is null or s.patient_id = cast(:patient as uuid)
     """
